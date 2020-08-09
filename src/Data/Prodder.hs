@@ -37,6 +37,8 @@ module Data.Prodder
   , initN
   , dropFirst
   , Consume(consume, produce, extend1, cmap)
+    -- * Rearranging and removing elements
+  , Strengthen(strengthen)
     -- * Transforming extensible products
   , remap
   -- * TODO remove when making an actual package

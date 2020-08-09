@@ -161,13 +161,13 @@ instance Eq (Sum '[]) where
 -- | Transforming one sum into a sum which contains all of the same types
 class Weaken xs ys where
   weaken :: Sum xs -> Sum ys
-instance {-# OVERLAPPABLE #-} (Weaken xs ys, x `HasTagIn` ys) => Weaken (x ': xs) ys where
+instance (Weaken xs ys, x `HasTagIn` ys) => Weaken (x ': xs) ys where
   weaken uv@(UnsafeInj tag' x) =
     if tag' == 0
       then UnsafeInj (tag @x @ys) x
       else let UnsafeInj tag'' _ = weaken @xs @ys (unsafeForget uv) in UnsafeInj tag'' x
   {-# INLINE CONLIKE weaken #-}
-instance {-# OVERLAPPABLE #-} Weaken '[] ys where
+instance Weaken '[] ys where
   weaken = error "weaken base case: impossible by construction"
   {-# INLINE CONLIKE weaken #-}
 

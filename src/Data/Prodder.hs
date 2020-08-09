@@ -104,12 +104,20 @@ instance Eq (Prod '[]) where
 instance (Eq x, Eq (Prod xs)) => Eq (Prod (x ': xs)) where
   px@(UnsafeProd x) == py@(UnsafeProd y) = unsafeCoerce @_ @x (x V.! 0) == unsafeCoerce @_ @x (y V.! 0) && dropFirst px == dropFirst py
 
+class Strengthen xs ys where
+  strengthen :: Prod xs -> Prod ys
+instance (Strengthen xs ys, y `HasIndexIn` xs) => Strengthen xs (y ': ys) where
+  strengthen p = UnsafeProd $ V.singleton (unsafeCoerce $ unProd p V.! fromIntegral (index @y @xs)) <> unProd (strengthen @xs @ys p)
+instance Strengthen xs '[] where
+  strengthen = const (UnsafeProd V.empty)
+
 prodTest :: IO ()
 prodTest = catchAndDisplay
   [ indexTest
   , remapTest
   , consumeAndProduceTest
   , extractTest
+  , strengthenTest
   ]
   where
     catchAndDisplay (x : xs) = catch @SomeException x print >> catchAndDisplay xs
@@ -134,3 +142,9 @@ prodTest = catchAndDisplay
           y :: Bool = extract x
           z :: Int = extract x
       unless (z == 10 && y) $ fail "Extracting does not work"
+    strengthenTest = do
+      let x :: Prod '[Int, Bool, Float] = produce (\f -> f 10 True 0.1)
+          y :: Prod '[Bool, Int, Float] = strengthen x
+          z :: Prod '[Bool, Int] = strengthen x
+      unless (y == produce (\f -> f True 10 0.1)) $ fail "strengthen doesn't work 1"
+      unless (z == produce (\f -> f True 10)) $ fail "strengthen doesn't work 2"

@@ -21,3 +21,5 @@ y' = strengthen x'
 a' :: Bool
 a' = consume y' (\b f -> b && f == 0.2)
 ```
+
+This package is extremely experimental, and is subject to arbitrarily large changes.

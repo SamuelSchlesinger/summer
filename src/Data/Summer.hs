@@ -28,6 +28,7 @@ module Data.Summer
   ( -- * The extensible sum type and its associated pattern for convenience
     Sum
   , pattern Inj
+  , tag
   -- * Construction and Deconstruction
   , inject
   , inspect
@@ -45,8 +46,6 @@ module Data.Summer
   -- * Transforming extensible sums
   , inmap
   , smap
-  -- * Tests TODO Remove when making a real package
-  , sumTest
   ) where
 
 import Control.Exception (catch, SomeException)
@@ -206,72 +205,3 @@ instance Unmatch '[] ys where
   unmatchGo = id
 instance (Unmatch xs ys, x `HasTagIn` ys) => Unmatch (x ': xs) ys where
   unmatchGo f = unmatchGo @xs (f (UnsafeInj (tag @x @ys) . unsafeCoerce @x))
-
-sumTest :: IO ()
-sumTest = catchAndDisplay
-  [ tagTest
-  , eqTest
-  , noOpWeakenTest
-  , weakenTest
-  , matchTest
-  , considerTest
-  , inmapTest
-  , smapTest
-  , unmatchTest
-  ]
-  where
-    catchAndDisplay (x : xs) = catch @SomeException x print >> catchAndDisplay xs
-    catchAndDisplay [] = pure ()
-    tagTest = do
-      let tag' = tag @Int @'[Bool, Int]
-          tag'' = tag @Bool @'[Bool, Int]
-      unless (tag' == 1) $ fail ("Tag " <> show tag' <> " does not equal 1")
-    eqTest = do
-      let x :: Sum '[Int, Bool] = Inj (10 :: Int)
-          y :: Sum '[Int, Bool] = Inj True
-          z :: Sum '[Int, Bool] = Inj (11 :: Int)
-          -- wrap around the alphabet like fromIntegral
-          a :: Sum '[Int, Bool] = Inj (10 :: Int)
-          b :: Sum '[Int, Bool] = Inj False
-          c :: Sum '[Int, Bool] = Inj True
-      unless (x /= y) $ fail "10 equals True"
-      unless (x /= z) $ fail "10 equals 11"
-      unless (x == a) $ fail "10 does not equal 10"
-      unless (y /= b) $ fail "True equals False"
-      unless (y == c) $ fail "True does not equal True"
-    noOpWeakenTest = do
-      let x :: Sum '[Int, Bool]  = Inj (10 :: Int)
-          y :: Sum '[Int, Bool, Integer] = noOpWeaken x
-      unless (y == Inj (10 :: Int)) $ fail "y does not equal Inj 10"
-      pure ()
-    weakenTest = do
-      let x :: Sum '[Int, Bool] = Inj (10 :: Int)
-          y :: Sum '[Bool, Int] = weaken x
-          z :: Sum '[Integer, Bool, Float, Int] = weaken y
-      unless (y == Inj (10 :: Int)) $ fail "y does not equal Inj 10"
-      unless (z == Inj (10 :: Int)) $ fail "y does not equal Inj 10"
-    matchTest = do
-      let x :: Sum '[Int, Bool] = Inj (10 :: Int)
-      unless (match x (== 10) id) $ fail "x does not match 10"
-    considerTest = do
-      let x :: Sum '[Int, Bool] = Inj (10 :: Int)
-          y :: Sum '[Int, Bool] = Inj True
-      unless (consider @Int x == Right 10) $ fail "x at Int is not considered to be 10"
-      unless (consider @Int y == Left (Inj True)) $ fail $ "x is not considered to be Left (Inj True)"
-      unless (consider @Bool y == Right True) $ fail "x at Bool is not considered to be Right True"
-    inmapTest = do
-      let x :: Sum '[Int, Bool] = Inj (10 :: Int)
-          y :: Sum '[Int, Bool] = inmap (== (10 :: Int)) x
-          z :: Sum '[Int, Bool] = inmap (== True) x
-      unless (y == Inj True) $ fail "x did not get mapped to True"
-      unless (z == Inj (10 :: Int)) $ fail "x did not get left alone"
-    smapTest = do
-      let x :: Sum '[Int, Bool] = Inj (10 :: Int)
-          y :: Sum '[Bool, Int] = smap (== (10 :: Int)) x
-          z :: Sum '[Bool, Int] = smap (== True) x
-      unless (y == Inj True) $ fail "x did not get mapped to True"
-      unless (z == Inj (10 :: Int)) $ fail "x did not get left alone"
-    unmatchTest = do
-      let x :: Sum '[Int, Bool] = Inj True
-          y = \f g -> f 100
-      unless (x == unmatch (match x)) $ fail "match and unmatch are not an inverse pair"

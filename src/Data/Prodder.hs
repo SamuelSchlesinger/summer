@@ -41,8 +41,6 @@ module Data.Prodder
   , Strengthen(strengthen)
     -- * Transforming extensible products
   , remap
-  -- * TODO remove when making an actual package
-  , prodTest
   ) where
 
 import Control.Monad (unless)
@@ -184,57 +182,3 @@ instance (Strengthen xs ys, y `HasIndexIn` xs) => Strengthen xs (y ': ys) where
 instance Strengthen xs '[] where
   strengthen = const (UnsafeProd V.empty)
   {-# INLINE CONLIKE strengthen #-}
-
-prodTest :: IO ()
-prodTest = catchAndDisplay
-  [ indexTest
-  , remapTest
-  , consumeAndProduceTest
-  , extractTest
-  , strengthenTest
-  , tailNTest
-  , initNTest
-  ]
-  where
-    catchAndDisplay (x : xs) = catch @SomeException x print >> catchAndDisplay xs
-    catchAndDisplay [] = pure ()
-    indexTest = do
-      let index' = index @Int @'[Bool, Int]
-          index'' = index @Bool @'[Bool, Int]
-      unless (index' == 1) $ fail ("Index " <> show index' <> " does not equal 1")
-      unless (index'' == 0) $ fail ("Index " <> show index'' <> " does not equal 0")
-    remapTest = do
-      let x :: Prod '[Int, Bool] = produce (\f -> f 10 True)
-      let y = remap ((+ 10000000000000000000000000000) . toInteger @Int) x
-      let z = remap not x
-      unless (y == produce (\f -> f 10000000000000000000000000010 True)) $ fail "Remapping does not work 1"
-      unless (z == produce (\f -> f 10 False)) $ fail "Remapping does not work 2"
-    consumeAndProduceTest = do
-      let x :: Prod '[Int, Bool] = produce (\f -> f 10 True)
-          y :: Bool = consume x (\n b -> n == 10 && b)
-      unless y $ fail "Consuming and producing does not work"
-    extractTest = do
-      let x :: Prod '[Int, Bool] = produce (\f -> f 10 True)
-          y :: Bool = extract x
-          z :: Int = extract x
-      unless (z == 10 && y) $ fail "Extracting does not work"
-    strengthenTest = do
-      let x :: Prod '[Int, Bool, Float] = produce (\f -> f 10 True 0.1)
-          y :: Prod '[Bool, Int, Float] = strengthen x
-          z :: Prod '[Bool, Int] = strengthen x
-      unless (y == produce (\f -> f True 10 0.1)) $ fail "strengthen doesn't work 1"
-      unless (z == produce (\f -> f True 10)) $ fail "strengthen doesn't work 2"
-    initNTest = do
-      let x :: Prod '[Int, Bool, Char, Float] = produce (\f -> f 10 True 'a' 0.2)
-      unless (initN @0 x == produce id) $ fail "tailN does not work 0"
-      unless (initN @1 x == produce (\f -> f 10)) $ fail "tailN does not work 1"
-      unless (initN @2 x == produce (\f -> f 10 True)) $ fail "tailN does not work 2"
-      unless (initN @3 x == produce (\f -> f 10 True 'a')) $ fail "tailN does not work 3"
-      unless (initN @4 x == produce (\f -> f 10 True 'a' 0.2)) $ fail "tailN does not work 4"
-    tailNTest = do
-      let x :: Prod '[Int, Bool, Char, Float] = produce (\f -> f 10 True 'a' 0.2)
-      unless (tailN @0 x == x) $ fail "tailN does not work 0"
-      unless (tailN @1 x == produce (\f -> f True 'a' 0.2)) $ fail "tailN does not work 1"
-      unless (tailN @2 x == produce (\f -> f 'a' 0.2)) $ fail "tailN does not work 2"
-      unless (tailN @3 x == produce (\f -> f 0.2)) $ fail "tailN does not work 3"
-      unless (tailN @4 x == produce id) $ fail "tailN does not work 3"

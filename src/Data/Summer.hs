@@ -31,6 +31,7 @@ module Data.Summer
   -- * Construction and deconstruction of extensible sums
   , inject
   , inspect
+  , consider
   -- * Type family to compute the tag of a type in a type level list
   , TagIn
   , HasTagIn

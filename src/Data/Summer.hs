@@ -38,6 +38,9 @@ module Data.Summer
   , Weaken(weaken)
   , noOpWeaken
   , HaveSameTagsIn
+  -- * Transforming the insides of extensible sums
+  , inmap
+  , smap
   -- * Matching on extensible sums in the style of 'maybe' or 'either'
   , Matcher
   , Match(match, override)
@@ -92,6 +95,16 @@ inspect (UnsafeVariant tag' x) = if tag @x @xs == tag' then Just (unsafeCoerce x
 -- correct one.
 consider :: forall x xs. Sum (x ': xs) -> Either (Sum xs) x
 consider (UnsafeVariant tag' x) = if tag' == 0 then Right (unsafeCoerce x) else Left (UnsafeVariant (tag' - 1) x)
+
+-- | Transforms one type in the sum into another.
+inmap :: forall x y xs. (x `HasTagIn` xs, y `HasTagIn` xs) => (x -> y) -> Sum xs -> Sum xs
+inmap f uv@(UnsafeVariant tag' x) = if tag' == tag @x @xs then UnsafeVariant (tag @y @xs) (unsafeCoerce (f (unsafeCoerce x))) else uv
+
+-- | Transform one type in one sum into another type in another sum.
+smap :: forall x y xs ys. (Weaken xs ys, x `HasTagIn` xs, y `HasTagIn` ys) => (x -> y) -> Sum xs -> Sum ys
+smap f uv@(UnsafeVariant tag' x) = if tag' == tag @x @xs then UnsafeVariant (tag @y @ys) (unsafeCoerce (f (unsafeCoerce x))) else weaken uv
+
+
 
 -- | A class which checks that every type has the same tag in the first
 -- list as the second. In other words, checks if the first list is a prefix
@@ -152,6 +165,8 @@ test = catchAndDisplay
   , weakenTest
   , matchTest
   , considerTest
+  , inmapTest
+  , smapTest
   ]
   where
     catchAndDisplay (x : xs) = catch @SomeException x print >> catchAndDisplay xs
@@ -192,3 +207,15 @@ test = catchAndDisplay
           y :: Sum '[Int, Bool] = Variant True
       unless (consider x == Right 10) $ fail "x is not considered to be 10"
       unless (consider y == Left (Variant True)) $ fail $ "x is not considered to be Left (Variant True)"
+    inmapTest = do
+      let x :: Sum '[Int, Bool] = Variant (10 :: Int)
+          y :: Sum '[Int, Bool] = inmap (== (10 :: Int)) x
+          z :: Sum '[Int, Bool] = inmap (== True) x
+      unless (y == Variant True) $ fail "x did not get mapped to True"
+      unless (z == Variant (10 :: Int)) $ fail "x did not get left alone"
+    smapTest = do
+      let x :: Sum '[Int, Bool] = Variant (10 :: Int)
+          y :: Sum '[Bool, Int] = smap (== (10 :: Int)) x
+          z :: Sum '[Bool, Int] = smap (== True) x
+      unless (y == Variant True) $ fail "x did not get mapped to True"
+      unless (z == Variant (10 :: Int)) $ fail "x did not get left alone"

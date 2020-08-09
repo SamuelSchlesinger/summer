@@ -1,5 +1,5 @@
 cabal-version:       >=1.10
-name:                extensible-sums
+name:                summer
 version:             0.1.0.0
 license-file:        LICENSE
 author:              Samuel Schlesinger

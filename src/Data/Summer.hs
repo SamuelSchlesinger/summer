@@ -28,24 +28,23 @@ module Data.Summer
   ( -- * The extensible sum type and its associated pattern for convenience
     Sum
   , pattern Inj
-  -- * Construction and deconstruction of extensible sums
+  -- * Construction and Deconstruction
   , inject
   , inspect
   , consider
-  , Delete
-  -- * Type family to compute the tag of a type in a type level list
+  , Match(match, override, unmatch)
+  -- * Type families
   , TagIn
   , HasTagIn
+  , Delete
+  , HaveSameTagsIn
+  , Matcher
   -- * Weakening extensible sums
   , Weaken(weaken)
   , noOpWeaken
-  , HaveSameTagsIn
-  -- * Transforming the insides of extensible sums
+  -- * Transforming extensible sums
   , inmap
   , smap
-  -- * Matching on extensible sums in the style of 'maybe' or 'either'
-  , Matcher
-  , Match(match, override)
   -- * Tests TODO Remove when making a real package
   , sumTest
   ) where

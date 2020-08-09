@@ -1,2 +1,2 @@
---command="ghci src/Data/Summer.hs"
---test=test
+--command="ghci src/Test.hs src/Data/Summer.hs src/Data/Prodder.hs -package vector"
+--test="test"

@@ -46,6 +46,8 @@ module Data.Summer
   -- * Matching on extensible sums in the style of 'maybe' or 'either'
   , Matcher
   , Match(match, override)
+  -- * Tests TODO Remove when making a real package
+  , sumTest
   ) where
 
 import Control.Exception (catch, SomeException)
@@ -206,8 +208,8 @@ instance Unmatch '[] ys where
 instance (Unmatch xs ys, x `HasTagIn` ys) => Unmatch (x ': xs) ys where
   unmatchGo f = unmatchGo @xs (f (UnsafeInj (tag @x @ys) . unsafeCoerce @x))
 
-test :: IO ()
-test = catchAndDisplay
+sumTest :: IO ()
+sumTest = catchAndDisplay
   [ tagTest
   , eqTest
   , noOpWeakenTest

@@ -74,8 +74,6 @@ remap f (UnsafeProd v) = UnsafeProd (update `V.imap` v) where
     | n == index @x @xs = unsafeCoerce $ f $ unsafeCoerce a
     | otherwise = a
 
--- TODO: Implement co-weakening
-
 type family Consumer xs r where
   Consumer '[] r = r
   Consumer (x ': xs) r = x -> Consumer xs r

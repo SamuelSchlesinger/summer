@@ -177,20 +177,34 @@ type family Matcher xs r :: Type where
 -- | A typeclass for scott encoding extensible sums
 class Match xs where
   match :: forall r. Sum xs -> Matcher xs r
+  unmatch :: (forall r. Matcher xs r) -> Sum xs
   override :: forall r. r -> Matcher xs r -> Matcher xs r
 instance Match '[] where
   match = error "match base case: impossible by construction"
+  {-# INLINE CONLIKE match #-}
+  unmatch = id
+  {-# INLINE CONLIKE unmatch #-}
   override = const
   {-# INLINE CONLIKE override #-}
-instance Match xs => Match (x ': xs) where
+instance (Unmatch xs (x ': xs), Match xs) => Match (x ': xs) where
   match :: forall r. Sum (x ': xs) -> (x -> r) -> Matcher xs r
   match uv@(UnsafeInj tag' x) f =
     if tag' == 0
       then override @xs @r (f (unsafeCoerce x)) $ match @xs @r (unsafeForget uv)
       else match @xs @r (unsafeForget uv)
   {-# INLINE CONLIKE match #-}
+  unmatch :: (forall r. (x -> r) -> Matcher xs r) -> Sum (x ': xs)
+  unmatch g = unmatchGo @xs $ g @(Sum (x ': xs)) (UnsafeInj 0 . unsafeCoerce @x)
+  {-# INLINE CONLIKE unmatch #-}
   override r m = fmap (override @xs r) m
   {-# INLINE CONLIKE override #-}
+
+class Unmatch xs ys where
+  unmatchGo :: Matcher xs (Sum ys) -> Sum ys
+instance Unmatch '[] ys where
+  unmatchGo = id
+instance (Unmatch xs ys, x `HasTagIn` ys) => Unmatch (x ': xs) ys where
+  unmatchGo f = unmatchGo @xs (f (UnsafeInj (tag @x @ys) . unsafeCoerce @x))
 
 test :: IO ()
 test = catchAndDisplay
@@ -202,6 +216,7 @@ test = catchAndDisplay
   , considerTest
   , inmapTest
   , smapTest
+  , unmatchTest
   ]
   where
     catchAndDisplay (x : xs) = catch @SomeException x print >> catchAndDisplay xs
@@ -255,3 +270,7 @@ test = catchAndDisplay
           z :: Sum '[Bool, Int] = smap (== True) x
       unless (y == Inj True) $ fail "x did not get mapped to True"
       unless (z == Inj (10 :: Int)) $ fail "x did not get left alone"
+    unmatchTest = do
+      let x :: Sum '[Int, Bool] = Inj True
+          y = \f g -> f 100
+      unless (x == unmatch (match x)) $ fail "match and unmatch are not an inverse pair"

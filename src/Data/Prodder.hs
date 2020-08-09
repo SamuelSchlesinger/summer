@@ -50,18 +50,22 @@ instance KnownNat (x `IndexIn` xs) => x `HasIndexIn` xs
 
 index :: forall x xs. x `HasIndexIn` xs => Word
 index = fromInteger $ natVal (Proxy @(IndexIn x xs))
+{-# INLINE CONLIKE index #-}
 
 extract :: forall x xs. x `HasIndexIn` xs => Prod xs -> x
 extract (UnsafeProd v) = unsafeCoerce $ v V.! fromIntegral (index @x @xs)
+{-# INLINE CONLIKE extract #-}
 
 dropFirst :: forall x xs. Prod (x ': xs) -> Prod xs
 dropFirst (UnsafeProd v) = UnsafeProd $ V.slice 1 (V.length v - 1) v
+{-# INLINE CONLIKE dropFirst #-}
 
 type family (<>) (xs :: [k]) (ys :: [k]) :: [k] where
   '[] <> ys = ys
   (x ': xs) <> ys = x ': (xs <> ys)
 combine :: forall xs ys. Prod xs -> Prod ys -> Prod (xs <> ys)
 combine (UnsafeProd p) (UnsafeProd q) = UnsafeProd (p V.++ q)
+{-# INLINE CONLIKE combine #-}
 
 type family Replace x y xs where
   Replace x y (x ': xs) = y ': xs
@@ -73,6 +77,8 @@ remap f (UnsafeProd v) = UnsafeProd (update `V.imap` v) where
   update (fromIntegral -> n) a
     | n == index @x @xs = unsafeCoerce $ f $ unsafeCoerce a
     | otherwise = a
+  {-# INLINE CONLIKE update #-}
+{-# INLINE CONLIKE remap #-}
 
 type family Consumer xs r where
   Consumer '[] r = r
@@ -86,28 +92,40 @@ class Consume xs where
 
 instance Consume '[] where
   consume = flip const
+  {-# INLINE CONLIKE consume #-}
   produce x = UnsafeProd V.empty
+  {-# INLINE CONLIKE produce #-}
   extend1 x = UnsafeProd (V.singleton (unsafeCoerce x))
+  {-# INLINE CONLIKE extend1 #-}
   cmap f x = f x
+  {-# INLINE CONLIKE cmap #-}
 
 instance Consume xs => Consume (x ': xs) where
   consume (UnsafeProd v) g = consume @xs (UnsafeProd (V.tail v)) $ g (unsafeCoerce $ v V.! 0)
+  {-# INLINE CONLIKE consume #-}
   produce g = g (extend1 @xs)
+  {-# INLINE CONLIKE produce #-}
   cmap f = fmap (cmap @xs f)
+  {-# INLINE CONLIKE cmap #-}
   extend1 (x1 :: x1) x = cmap @xs @(Prod (x ': xs)) @(Prod (x1 ': x ': xs)) (UnsafeProd . (V.singleton (unsafeCoerce x1) V.++) . unProd) (extend1 @xs x)
+  {-# INLINE CONLIKE extend1 #-}
 
 instance Eq (Prod '[]) where
   _ == _ = True
+  {-# INLINE CONLIKE (==) #-}
 
 instance (Eq x, Eq (Prod xs)) => Eq (Prod (x ': xs)) where
   px@(UnsafeProd x) == py@(UnsafeProd y) = unsafeCoerce @_ @x (x V.! 0) == unsafeCoerce @_ @x (y V.! 0) && dropFirst px == dropFirst py
+  {-# INLINE CONLIKE (==) #-}
 
 class Strengthen xs ys where
   strengthen :: Prod xs -> Prod ys
 instance (Strengthen xs ys, y `HasIndexIn` xs) => Strengthen xs (y ': ys) where
   strengthen p = UnsafeProd $ V.singleton (unsafeCoerce $ unProd p V.! fromIntegral (index @y @xs)) <> unProd (strengthen @xs @ys p)
+  {-# INLINE CONLIKE strengthen #-}
 instance Strengthen xs '[] where
   strengthen = const (UnsafeProd V.empty)
+  {-# INLINE CONLIKE strengthen #-}
 
 prodTest :: IO ()
 prodTest = catchAndDisplay

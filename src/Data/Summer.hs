@@ -58,7 +58,7 @@ import Control.Monad (unless)
 
 -- | The extensible sum type, allowing inhabitants to be of any of the
 -- types in the given type list.
-data Sum (xs :: [*]) = UnsafeInj !Word Any
+data Sum (xs :: [*]) = UnsafeInj {-# UNPACK #-} !Word Any
 
 type role Sum representational
 

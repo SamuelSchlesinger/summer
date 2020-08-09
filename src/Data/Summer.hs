@@ -92,10 +92,18 @@ inject x = UnsafeVariant (tag @x @xs) (unsafeCoerce x)
 inspect :: forall x xs. (x `HasTagIn` xs) => Sum xs -> Maybe x
 inspect (UnsafeVariant tag' x) = if tag @x @xs == tag' then Just (unsafeCoerce x) else Nothing
 
+type family Delete (x :: k) (xs :: [k]) :: [k] where
+  Delete x (x ': xs) = xs
+  Delete x (y ': xs) = y ': Delete x xs
+  Delete x '[] = '[]
+
 -- | Consider a certain type, discarding it as an option if it is not the
 -- correct one.
-consider :: forall x xs. Sum (x ': xs) -> Either (Sum xs) x
-consider (UnsafeVariant tag' x) = if tag' == 0 then Right (unsafeCoerce x) else Left (UnsafeVariant (tag' - 1) x)
+consider :: forall x xs. (x `HasTagIn` xs) => Sum xs -> Either (Sum (Delete x xs)) x
+consider (UnsafeVariant tag' x) =
+  if tag' == tag @x @xs
+    then Right (unsafeCoerce x)
+    else Left (UnsafeVariant (if tag' >= tag @x @xs then tag' - 1 else tag') x)
 
 -- | Transforms one type in the sum into another.
 inmap :: forall x y xs. (x `HasTagIn` xs, y `HasTagIn` xs) => (x -> y) -> Sum xs -> Sum xs
@@ -104,7 +112,6 @@ inmap f uv@(UnsafeVariant tag' x) = if tag' == tag @x @xs then UnsafeVariant (ta
 -- | Transform one type in one sum into another type in another sum.
 smap :: forall x y xs ys. (Weaken xs ys, x `HasTagIn` xs, y `HasTagIn` ys) => (x -> y) -> Sum xs -> Sum ys
 smap f uv@(UnsafeVariant tag' x) = if tag' == tag @x @xs then UnsafeVariant (tag @y @ys) (unsafeCoerce (f (unsafeCoerce x))) else weaken uv
-
 
 
 -- | A class which checks that every type has the same tag in the first
@@ -206,8 +213,9 @@ test = catchAndDisplay
     considerTest = do
       let x :: Sum '[Int, Bool] = Variant (10 :: Int)
           y :: Sum '[Int, Bool] = Variant True
-      unless (consider x == Right 10) $ fail "x is not considered to be 10"
-      unless (consider y == Left (Variant True)) $ fail $ "x is not considered to be Left (Variant True)"
+      unless (consider @Int x == Right 10) $ fail "x at Int is not considered to be 10"
+      unless (consider @Int y == Left (Variant True)) $ fail $ "x is not considered to be Left (Variant True)"
+      unless (consider @Bool y == Right True) $ fail "x at Bool is not considered to be Right True"
     inmapTest = do
       let x :: Sum '[Int, Bool] = Variant (10 :: Int)
           y :: Sum '[Int, Bool] = inmap (== (10 :: Int)) x

@@ -36,7 +36,7 @@ module Data.Prodder
   , IndexIn
   , HasIndexIn
   , Consumer
-  , (<>)
+  , type (<>)
   , Length
   , Tail
   , Init

@@ -1,5 +1,9 @@
 # summer
 
+[![Hackage](https://img.shields.io/hackage/v/summer.svg)](https://hackage.haskell.org/package/summer)
+[![Build Status](https://travis-ci.org/SamuelSchlesinger/summer.svg?branch=master)](https://travis-ci.org/SamuelSchlesinger/summer)
+
+
 Extensible sums and products for Haskell.
 
 ```haskell

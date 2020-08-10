@@ -25,11 +25,6 @@ Description: Extensible products
 module Data.Prodder
   ( -- * The extensible product type
     Prod
-    -- * Type families
-  , IndexIn
-  , HasIndexIn
-  , Consumer
-  , (<>)
     -- * Construction and deconstruction
   , extract
   , index
@@ -37,6 +32,15 @@ module Data.Prodder
   , initN
   , dropFirst
   , Consume(consume, produce, extend1, cmap)
+    -- * Type families
+  , IndexIn
+  , HasIndexIn
+  , Consumer
+  , (<>)
+  , Length
+  , Tail
+  , Init
+  , Replace
     -- * Rearranging and removing elements
   , Strengthen(strengthen)
     -- * Transforming extensible products
@@ -67,10 +71,12 @@ type family Length (xs :: [k]) where
   Length '[] = 0
   Length (x ': xs) = 1 + Length xs
 
+-- | A type family for computing the tail of a type level list
 type family Tail n xs where
   Tail 0 xs = xs
   Tail n (x ': xs) = Tail (n - 1) xs
 
+-- | A type family for computing the initial segment of a type level list
 type family Init n xs where
   Init 0 xs = '[]
   Init n (x ': xs) = x ': Init (n - 1) xs

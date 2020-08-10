@@ -34,6 +34,7 @@ module Data.Summer
   , inspect
   , consider
   , Match(match, override, unmatch)
+  , Unmatch
   -- * Type families
   , TagIn
   , HasTagIn
@@ -199,9 +200,12 @@ instance (Unmatch xs (x ': xs), Match xs) => Match (x ': xs) where
   override r m = fmap (override @xs r) m
   {-# INLINE CONLIKE override #-}
 
+-- | A utility typeclass which makes the implementation of 'Match' cleaner.
 class Unmatch xs ys where
   unmatchGo :: Matcher xs (Sum ys) -> Sum ys
 instance Unmatch '[] ys where
   unmatchGo = id
+  {-# INLINE CONLIKE unmatchGo #-}
 instance (Unmatch xs ys, x `HasTagIn` ys) => Unmatch (x ': xs) ys where
   unmatchGo f = unmatchGo @xs (f (UnsafeInj (tag @x @ys) . unsafeCoerce @x))
+  {-# INLINE CONLIKE unmatchGo #-}

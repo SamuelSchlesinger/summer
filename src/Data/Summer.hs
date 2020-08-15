@@ -124,7 +124,7 @@ inmap f uv@(UnsafeInj tag' x) = if tag' == tag @x @xs then UnsafeInj (tag @y @xs
 {-# INLINE CONLIKE inmap #-}
 
 -- | Transform one type in one sum into another type in another sum.
-smap :: forall x y xs ys. (Weaken xs ys, x `HasTagIn` xs, y `HasTagIn` ys) => (x -> y) -> Sum xs -> Sum ys
+smap :: forall x y xs ys. (Weaken (Delete x xs) ys, x `HasTagIn` xs, y `HasTagIn` ys) => (x -> y) -> Sum xs -> Sum ys
 smap f uv@(UnsafeInj tag' x) = if tag' == tag @x @xs then UnsafeInj (tag @y @ys) (unsafeCoerce (f (unsafeCoerce x))) else weaken uv
 {-# INLINE CONLIKE smap #-}
 

@@ -1,3 +1,0 @@
---command="ghci test/Test.hs src/Data/Summer.hs src/Data/Prodder.hs -package vector"
---test="main"
---restart="summer.cabal"

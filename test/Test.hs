@@ -76,6 +76,7 @@ sumTest = catchAndDisplay
   , inmapTest
   , smapTest
   , unmatchTest
+  , genericTest
   ]
   where
     catchAndDisplay (x : xs) = catch @SomeException x print >> catchAndDisplay xs

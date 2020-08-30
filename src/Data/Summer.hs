@@ -56,10 +56,29 @@ import GHC.TypeLits (Nat, KnownNat, natVal, type (+))
 import Data.Proxy (Proxy(Proxy))
 import Data.Kind (Type)
 import Control.Monad (unless)
+import Generics.SOP (Generic(..))
+import qualified Generics.SOP as SOP
 
 -- | The extensible sum type, allowing inhabitants to be of any of the
 -- types in the given type list.
 data Sum (xs :: [*]) = UnsafeInj {-# UNPACK #-} !Word Any
+
+instance Generic (Sum '[]) where
+  type Code (Sum '[]) = '[]
+  from a = error "Generics.SOP.from: Impossible to create an empty sum"
+  to a = error "Generics.SOP.to: Impossible to create an empty sum"
+
+instance Generic (Sum xs) => Generic (Sum (x ': xs)) where
+  type Code (Sum (x ': xs)) = '[x] ': Code (Sum xs)
+  from (UnsafeInj 0 x) = SOP.SOP (SOP.Z (SOP.I (unsafeCoerce x) SOP.:* SOP.Nil))
+  from xs = SOP.SOP (SOP.S ns) where
+    SOP.SOP ns = from (unsafeForgetFirst xs)
+  to (SOP.SOP ns) = case ns of
+    SOP.Z (SOP.I x SOP.:* SOP.Nil) -> UnsafeInj 0 (unsafeCoerce x)
+    SOP.S s -> recall (to (SOP.SOP s))
+    where
+      recall :: Sum xs -> Sum (x ': xs)
+      recall (UnsafeInj i a) = UnsafeInj (i + 1) a
 
 type role Sum representational
 

@@ -125,7 +125,7 @@ inmap f uv@(UnsafeInj tag' x) = if tag' == tag @x @xs then UnsafeInj (tag @y @xs
 
 -- | Transform one type in one sum into another type in another sum.
 smap :: forall x y xs ys. (Weaken (Delete x xs) ys, x `HasTagIn` xs, y `HasTagIn` ys) => (x -> y) -> Sum xs -> Sum ys
-smap f uv@(UnsafeInj tag' x) = if tag' == tag @x @xs then UnsafeInj (tag @y @ys) (unsafeCoerce (f (unsafeCoerce x))) else weaken uv
+smap f uv@(UnsafeInj tag' x) = if tag' == tag @x @xs then UnsafeInj (tag @y @ys) (unsafeCoerce (f (unsafeCoerce x))) else weaken (unsafeForget @x uv)
 {-# INLINE CONLIKE smap #-}
 
 -- | A class which checks that every type has the same tag in the first
@@ -141,8 +141,14 @@ noOpWeaken :: forall xs ys. (xs `HaveSameTagsIn` ys) => Sum xs -> Sum ys
 noOpWeaken = unsafeCoerce
 {-# INLINE CONLIKE noOpWeaken #-}
 
-unsafeForget :: Sum (x ': xs) -> Sum xs
-unsafeForget (UnsafeInj tag' x) = UnsafeInj (tag' - 1) x
+unsafeForget :: forall x xs. x `HasTagIn` xs => Sum xs -> Sum (Delete x xs)
+unsafeForget (UnsafeInj tag' x) = if tag' < tag @x @xs then UnsafeInj tag' x
+                             else if tag' == tag @x @xs then error "unsafeForget: you can't forget the truth"
+                             else UnsafeInj (tag' - 1) x
+
+
+unsafeForgetFirst :: Sum (x ': xs) -> Sum xs
+unsafeForgetFirst (UnsafeInj tag' x) = UnsafeInj (tag' - 1) x
 {-# INLINE CONLIKE unsafeForget #-}
 
 -- | Testing extensible sums for equality.
@@ -151,7 +157,7 @@ instance (Eq (Sum xs), Eq x) => Eq (Sum (x ': xs)) where
     | tag' == tag'' =
         if tag' == 0
           then unsafeCoerce @_ @x x == unsafeCoerce @_ @x x'
-          else unsafeForget uv == unsafeForget uv'
+          else unsafeForgetFirst uv == unsafeForgetFirst uv'
     | otherwise = False
   {-# INLINE CONLIKE (==) #-}
 instance Eq (Sum '[]) where
@@ -164,7 +170,7 @@ instance (Weaken xs ys, x `HasTagIn` ys) => Weaken (x ': xs) ys where
   weaken uv@(UnsafeInj tag' x) =
     if tag' == 0
       then UnsafeInj (tag @x @ys) x
-      else let UnsafeInj tag'' _ = weaken @xs @ys (unsafeForget uv) in UnsafeInj tag'' x
+      else let UnsafeInj tag'' _ = weaken @xs @ys (unsafeForgetFirst uv) in UnsafeInj tag'' x
   {-# INLINE CONLIKE weaken #-}
 instance Weaken '[] ys where
   weaken = error "weaken base case: impossible by construction"
@@ -191,8 +197,8 @@ instance (Unmatch xs (x ': xs), Match xs) => Match (x ': xs) where
   match :: forall r. Sum (x ': xs) -> (x -> r) -> Matcher xs r
   match uv@(UnsafeInj tag' x) f =
     if tag' == 0
-      then override @xs @r (f (unsafeCoerce x)) $ match @xs @r (unsafeForget uv)
-      else match @xs @r (unsafeForget uv)
+      then override @xs @r (f (unsafeCoerce x)) $ match @xs @r (unsafeForgetFirst uv)
+      else match @xs @r (unsafeForgetFirst uv)
   {-# INLINE CONLIKE match #-}
   unmatch :: (forall r. (x -> r) -> Matcher xs r) -> Sum (x ': xs)
   unmatch g = unmatchGo @xs $ g @(Sum (x ': xs)) (UnsafeInj 0 . unsafeCoerce @x)

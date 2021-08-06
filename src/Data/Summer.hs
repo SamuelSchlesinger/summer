@@ -208,7 +208,7 @@ class Match xs where
 instance Match '[] where
   match = error "match base case: impossible by construction"
   {-# INLINE CONLIKE match #-}
-  unmatch = id
+  unmatch r = r
   {-# INLINE CONLIKE unmatch #-}
   override = const
   {-# INLINE CONLIKE override #-}

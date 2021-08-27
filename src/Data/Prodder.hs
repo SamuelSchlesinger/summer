@@ -1,3 +1,4 @@
+{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
@@ -31,8 +32,10 @@ module Data.Prodder
   , tailN
   , initN
   , dropFirst
-  , Consume(consume, produce, extend1, cmap)
+  , Consume(consume, extend1, cmap)
+  , produce
     -- * Type families
+  , Index
   , IndexIn
   , HasIndexIn
   , Consumer
@@ -53,11 +56,23 @@ import GHC.Exts (Any)
 import Unsafe.Coerce (unsafeCoerce)
 import Data.Vector (Vector)
 import qualified Data.Vector as V
-import GHC.TypeLits (KnownNat, type (+), type (-), natVal, type (<=))
+import qualified Data.Vector.Mutable as MV
+import GHC.TypeLits (KnownNat, type (+), type (-), natVal, type (<=), Nat)
 import Data.Proxy (Proxy(Proxy))
+import Control.Monad.ST
+import Data.STRef (newSTRef, STRef, writeSTRef, readSTRef)
 
 -- | An extensible product type
-data Prod (xs :: [*]) = UnsafeProd { unProd :: Vector Any }
+newtype Prod (xs :: [*]) = UnsafeProd { unProd :: Vector Any }
+
+newtype ProdBuilder (xs :: [*]) = UnsafeProdBuilder { unProdBuilder :: forall s. STRef s Int -> V.MVector s Any -> ST s () }
+
+buildProd :: forall xs. (KnownNat (Length xs)) => ProdBuilder xs -> Prod xs
+buildProd (UnsafeProdBuilder bs) = UnsafeProd $ V.create do
+  ref <- newSTRef 0
+  x <- MV.new (fromInteger $ natVal (Proxy @(Length xs)))
+  bs ref x
+  pure x
 
 type role Prod representational
 
@@ -65,6 +80,11 @@ type role Prod representational
 type family IndexIn (x :: k) (xs :: [k]) where
   IndexIn x (x ': xs) = 0
   IndexIn x (y ': xs) = 1 + IndexIn x xs
+
+-- | A type family for indexing into lists of types.
+type family Index (n :: Nat) (xs :: [k]) where
+  Index 0 (x ': xs) = x
+  Index n (_ ': xs) = Index (n - 1) xs
 
 -- | A type family for computing the length of a type level list
 type family Length (xs :: [k]) where
@@ -147,28 +167,43 @@ type family Consumer xs r where
 -- extensible products.
 class Consume xs where
   consume :: forall r. Prod xs -> Consumer xs r -> r
-  produce :: (forall r. Consumer xs r -> r) -> Prod xs
-  extend1 :: x -> Consumer xs (Prod (x ': xs))
+  produceBuilder :: (forall r. Consumer xs r -> r) -> ProdBuilder xs
+  extend1 :: x -> Consumer xs (ProdBuilder (x ': xs))
   cmap :: (r -> r') -> Consumer xs r -> Consumer xs r' 
+
+produce :: (KnownNat (Length xs), Consume xs) => (forall r. Consumer xs r -> r) -> Prod xs
+produce f = buildProd $ produceBuilder f
 
 instance Consume '[] where
   consume = flip const
   {-# INLINE CONLIKE consume #-}
-  produce x = UnsafeProd V.empty
-  {-# INLINE CONLIKE produce #-}
-  extend1 x = UnsafeProd (V.singleton (unsafeCoerce x))
+  produceBuilder x = UnsafeProdBuilder \ref v -> pure ()
+  {-# INLINE CONLIKE produceBuilder #-}
+  extend1 x = UnsafeProdBuilder \ref v -> withIncrement ref \i -> MV.write v i (unsafeCoerce x)
   {-# INLINE CONLIKE extend1 #-}
   cmap f x = f x
   {-# INLINE CONLIKE cmap #-}
 
+withIncrement :: STRef s Int -> (Int -> ST s x) -> ST s x
+withIncrement ref f = do
+  i <- readSTRef ref
+  x <- f i
+  writeSTRef ref (i + 1)
+  pure x
+
 instance Consume xs => Consume (x ': xs) where
   consume (UnsafeProd v) g = consume @xs (UnsafeProd (V.tail v)) $ g (unsafeCoerce $ v V.! 0)
   {-# INLINE CONLIKE consume #-}
-  produce g = g (extend1 @xs)
-  {-# INLINE CONLIKE produce #-}
+  produceBuilder g = g (extend1 @xs)
+  {-# INLINE CONLIKE produceBuilder #-}
   cmap f = fmap (cmap @xs f)
   {-# INLINE CONLIKE cmap #-}
-  extend1 (x1 :: x1) x = cmap @xs @(Prod (x ': xs)) @(Prod (x1 ': x ': xs)) (UnsafeProd . (V.singleton (unsafeCoerce x1) V.++) . unProd) (extend1 @xs x)
+  extend1 (x1 :: x1) x = cmap @xs @(ProdBuilder (x ': xs)) @(ProdBuilder (x1 ': x ': xs)) f (extend1 @xs x) where
+    f (UnsafeProdBuilder b) = UnsafeProdBuilder \ref v -> (withIncrement ref \i -> MV.write v i (unsafeCoerce x1)) >> b ref v
+    
+      
+     
+  -- cmap @xs @(Prod (x ': xs)) @(Prod (x1 ': x ': xs)) (UnsafeProd . (V.singleton (unsafeCoerce x1) V.++) . unProd) (extend1 @xs x)
   {-# INLINE CONLIKE extend1 #-}
 
 instance Eq (Prod '[]) where

@@ -24,6 +24,14 @@ y' = strengthen x'
 
 a' :: Bool
 a' = consume y' (\b f -> b && f == 0.2)
+
+table :: Table '[Bool, Int, Float]
+
+pred :: Float -> Bool -> Bool
+pred f b = f > 5 && b || f < 2 && not b
+
+table' :: Table '[Bool, Int, Float]
+table' = filterOn table pred
 ```
 
 This package is extremely experimental, and is subject to arbitrarily large changes.

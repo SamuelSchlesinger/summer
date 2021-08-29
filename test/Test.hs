@@ -7,7 +7,6 @@ import Control.Exception
 import Control.Monad
 import Data.Summer
 import Data.Prodder
-import Data.Database
 
 main :: IO ()
 main = sumTest >> prodTest
@@ -80,6 +79,13 @@ prodTest = catchAndDisplay
         , (tailN @2 x == produce (\f -> f 'a' 0.2), "tailN does not work 2")
         , (tailN @3 x == produce (\f -> f 0.2), "tailN does not work 3")
         , (tailN @4 x == produce id, "tailN does not work 3")
+        ]
+    selectTest = do
+      let x :: Prod '[Int, Bool, Char, Float] = produce (\f -> f 10 True 'a' 0.2)
+      requires
+        [ (select x (\(n :: Int) -> n == 10), "select does not work 0")
+        , (select x (\(f :: Float) -> f == 0.2), "select does not work 1")
+        , (select x (\(b :: Bool) (f :: Float) -> b && f == 0.2), "select does not work 2")
         ]
 
 sumTest :: IO ()
@@ -160,24 +166,3 @@ sumTest = catchAndDisplay
       let x :: Sum '[Int, Bool] = Inj True
           y = \f g -> f 100
       require (x == unmatch (match x)) "match and unmatch are not an inverse pair"
-    filterOnTest = do
-      let a, b, c :: Prod '[Int, Bool]
-          a = produce (\f -> f 1 False)
-          b = produce (\f -> f 2 True)
-          c = produce (\f -> f 3 False)
-          xs :: Table '[Int, Bool] = [a, b, c]
-          trueFilter, falseFilter :: Bool -> Int -> Bool
-          trueFilter _ _ = True
-          falseFilter _ _ = False
-          boolFilter :: Bool -> Bool
-          boolFilter = id
-          greaterThanFilter :: Int ->  Int -> Bool
-          greaterThanFilter m n = n > m
-          
-      require (xs == filterOn xs trueFilter) "true filter returns the same table back"
-      require ([] == filterOn xs falseFilter) "false filter returns the empty table"
-      require ([b] == filterOn xs boolFilter) "bool filter returns the only row with true in the Bool row"
-      require ([a, b, c] == filterOn xs (greaterThanFilter 0)) "greater than zero"
-      require ([b, c] == filterOn xs (greaterThanFilter 1)) "greater than 1"
-      require ([c] == filterOn xs (greaterThanFilter 2)) "greater than 2"
-      require ([] == filterOn xs (greaterThanFilter 3)) "greater than 3"

@@ -48,12 +48,17 @@ module Data.Prodder
   , Strengthen(strengthen)
     -- * Transforming extensible products
   , remap
+    -- * Picking out individual components of a product
+  , Selection(select)
+  , type FieldsFromSelector
+  , type Selector
   ) where
 
 import Control.Monad (unless)
 import Control.Exception (catch, SomeException)
 import GHC.Exts (Any)
 import Unsafe.Coerce (unsafeCoerce)
+import Data.Functor.Identity (Identity (..))
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import qualified Data.Vector.Mutable as MV
@@ -223,3 +228,23 @@ instance (Strengthen xs ys, y `HasIndexIn` xs) => Strengthen xs (y ': ys) where
 instance Strengthen xs '[] where
   strengthen = const (UnsafeProd V.empty)
   {-# INLINE CONLIKE strengthen #-}
+
+-- | A typeclass for creating a selection function which is valid on the given definition.
+type family Selector def fields a where
+  Selector def (field ': fields) a = Index field def -> Selector def fields a
+  Selector def '[] a = a
+
+-- | Extracts the fields intended from the given selector type.
+type family FieldsFromSelector def selector where
+  FieldsFromSelector def (a -> b) = IndexIn a def ': FieldsFromSelector def b
+  FieldsFromSelector def (Identity a) = '[]
+
+-- | A class for constructing the select function inductively.
+class Selection def selector a where
+  select :: Prod def -> selector -> a
+
+instance Selection def a a where
+  select _prod s = s
+
+instance (HasIndexIn x def, Selection def xs a) => Selection def (x -> xs) a where
+  select prod f = select @_ @_ @a prod (f (extract @x prod))

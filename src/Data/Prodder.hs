@@ -1,3 +1,5 @@
+{-# LANGUAGE UndecidableSuperClasses #-}
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -32,8 +34,16 @@ module Data.Prodder
   , tailN
   , initN
   , dropFirst
-  , Consume(consume, extend1, cmap)
+  , Consume(consume, extend1, cmap, produceB)
   , produce
+  , empty
+  , ToList(toList)
+  , type ForAll
+    -- ** Efficient Iterative Construction
+  , buildProd
+  , ProdBuilder
+  , consB
+  , emptyB
     -- * Type families
   , Index
   , IndexIn
@@ -52,11 +62,13 @@ module Data.Prodder
   , Selection(select)
   , type FieldsFromSelector
   , type Selector
+    -- * Efficiently building 'Prod's
   ) where
 
+import Data.ForAll (type ForAll)
 import Control.Monad (unless)
 import Control.Exception (catch, SomeException)
-import GHC.Exts (Any)
+import GHC.Exts (Any, Constraint)
 import Unsafe.Coerce (unsafeCoerce)
 import Data.Functor.Identity (Identity (..))
 import Data.Vector (Vector)
@@ -70,8 +82,19 @@ import Data.STRef (newSTRef, STRef, writeSTRef, readSTRef)
 -- | An extensible product type
 newtype Prod (xs :: [*]) = UnsafeProd { unProd :: Vector Any }
 
+-- | A type for constructing products with linear memory use.
 newtype ProdBuilder (xs :: [*]) = UnsafeProdBuilder { unProdBuilder :: forall s. STRef s Int -> V.MVector s Any -> ST s () }
 
+-- | Cons an element onto the head of a 'ProdBuilder'.
+consB :: x -> ProdBuilder xs -> ProdBuilder (x ': xs)
+consB x (UnsafeProdBuilder b) = UnsafeProdBuilder \ref v -> withIncrement ref \i -> do
+  MV.write v i (unsafeCoerce x)
+
+-- | Empty 'ProdBuilder'.
+emptyB :: ProdBuilder '[]
+emptyB = UnsafeProdBuilder \_ _ -> pure ()
+
+-- | Execute a 'ProdBuilder', pulling out a 'Prod'.
 buildProd :: forall xs. (KnownNat (Length xs)) => ProdBuilder xs -> Prod xs
 buildProd (UnsafeProdBuilder bs) = UnsafeProd $ V.create do
   ref <- newSTRef 0
@@ -172,18 +195,21 @@ type family Consumer xs r where
 -- extensible products.
 class Consume xs where
   consume :: forall r. Prod xs -> Consumer xs r -> r
-  produceBuilder :: (forall r. Consumer xs r -> r) -> ProdBuilder xs
+  produceB :: (forall r. Consumer xs r -> r) -> ProdBuilder xs
   extend1 :: x -> Consumer xs (ProdBuilder (x ': xs))
   cmap :: (r -> r') -> Consumer xs r -> Consumer xs r' 
 
 produce :: (KnownNat (Length xs), Consume xs) => (forall r. Consumer xs r -> r) -> Prod xs
-produce f = buildProd $ produceBuilder f
+produce f = buildProd $ produceB f
+
+empty :: Prod '[]
+empty = buildProd $ produceB id
 
 instance Consume '[] where
   consume = flip const
   {-# INLINE CONLIKE consume #-}
-  produceBuilder x = UnsafeProdBuilder \ref v -> pure ()
-  {-# INLINE CONLIKE produceBuilder #-}
+  produceB x = UnsafeProdBuilder \ref v -> pure ()
+  {-# INLINE CONLIKE produceB #-}
   extend1 x = UnsafeProdBuilder \ref v -> withIncrement ref \i -> MV.write v i (unsafeCoerce x)
   {-# INLINE CONLIKE extend1 #-}
   cmap f x = f x
@@ -199,8 +225,8 @@ withIncrement ref f = do
 instance Consume xs => Consume (x ': xs) where
   consume (UnsafeProd v) g = consume @xs (UnsafeProd (V.tail v)) $ g (unsafeCoerce $ v V.! 0)
   {-# INLINE CONLIKE consume #-}
-  produceBuilder g = g (extend1 @xs)
-  {-# INLINE CONLIKE produceBuilder #-}
+  produceB g = g (extend1 @xs)
+  {-# INLINE CONLIKE produceB #-}
   cmap f = fmap (cmap @xs f)
   {-# INLINE CONLIKE cmap #-}
   extend1 (x1 :: x1) x = cmap @xs @(ProdBuilder (x ': xs)) @(ProdBuilder (x1 ': x ': xs)) f (extend1 @xs x) where
@@ -245,6 +271,21 @@ class Selection def selector a where
 
 instance Selection def a a where
   select _prod s = s
+  {-# INLINE CONLIKE select #-}
 
 instance (HasIndexIn x def, Selection def xs a) => Selection def (x -> xs) a where
   select prod f = select @_ @_ @a prod (f (extract @x prod))
+  {-# INLINE CONLIKE select #-}
+
+-- | A class for turning a 'Prod' into a regular list using a
+-- function which takes an argument only constrained by a 'Constraint'
+-- each element of the product has.
+class ForAll c xs => ToList c xs where
+  toList :: (forall a. c a => a -> b) -> Prod xs -> [b]
+
+instance ToList c '[] where
+  toList _f _p = []
+
+instance (c x, ToList c xs) => ToList c (x ': xs) where
+  toList f p = f x : toList @c f (dropFirst p) where
+    x = extract @x p

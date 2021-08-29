@@ -1,3 +1,5 @@
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE UndecidableSuperClasses #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -33,6 +35,7 @@ module Data.Summer
   , inject
   , inspect
   , consider
+  , considerFirst
   , Match(match, override, unmatch)
   , Unmatch
   -- * Type families
@@ -47,6 +50,9 @@ module Data.Summer
   -- * Transforming extensible sums
   , inmap
   , smap
+  -- * Applying Polymorphic Functions
+  , ApplyFunction(apply)
+  , type ForAll
   ) where
 
 import Control.Exception (catch, SomeException)
@@ -58,6 +64,7 @@ import Data.Kind (Type)
 import Control.Monad (unless)
 import Generics.SOP (Generic(..))
 import qualified Generics.SOP as SOP
+import Data.ForAll (type ForAll)
 
 -- | The extensible sum type, allowing inhabitants to be of any of the
 -- types in the given type list.
@@ -234,3 +241,16 @@ instance Unmatch '[] ys where
 instance (Unmatch xs ys, x `HasTagIn` ys) => Unmatch (x ': xs) ys where
   unmatchGo f = unmatchGo @xs (f (UnsafeInj (tag @x @ys) . unsafeCoerce @x))
   {-# INLINE CONLIKE unmatchGo #-}
+
+-- | Using functions which only require constraints which are satisfied by
+-- all members of the sum.
+class ForAll c xs => ApplyFunction c xs where
+  apply :: (forall a. c a => a -> y) -> Sum xs -> y
+
+instance ApplyFunction c '[] where
+  apply _f x = error "Impossible: empty sum"
+
+instance (c x, ApplyFunction c xs) => ApplyFunction c (x ': xs) where
+  apply f x = case considerFirst x of
+    Right x' -> f x'
+    Left xs -> apply @c f xs

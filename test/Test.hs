@@ -1,3 +1,4 @@
+{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
@@ -87,6 +88,17 @@ prodTest = catchAndDisplay
         , (select x (\(f :: Float) -> f == 0.2), "select does not work 1")
         , (select x (\(b :: Bool) (f :: Float) -> b && f == 0.2), "select does not work 2")
         ]
+    prodBuilderTest = do
+      requires
+        [ (empty == buildProd emptyB, "prodBuilder does not work 0")
+        , (produce (\f -> f "Hello") == buildProd (consB "Hello" emptyB), "prodBuilder does not work 1")
+        ]
+    toListTest = do
+      let x :: Prod '[String, Bool] = produce \f -> f "Hello" True
+      requires
+        [ (toList @Show show x == [show "Hello", show True], "toList does not work 0")
+        , (toList @Eq (\a -> a == a) x == [True, True], "toList does not work 1")
+        ]
 
 sumTest :: IO ()
 sumTest = catchAndDisplay
@@ -166,3 +178,6 @@ sumTest = catchAndDisplay
       let x :: Sum '[Int, Bool] = Inj True
           y = \f g -> f 100
       require (x == unmatch (match x)) "match and unmatch are not an inverse pair"
+    applyTest = do
+      let x :: Sum '[Int, Bool] = Inj False
+      require (apply @Show show x == "False") "apply does not work 0"

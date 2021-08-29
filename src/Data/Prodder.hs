@@ -105,7 +105,7 @@ buildProd (UnsafeProdBuilder bs) = UnsafeProd $ V.create do
   pure x
 
 -- | Appends two 'ProdBuilder's.
-appendB :: ProdBuilder xs -> ProdBuilder ys -> ProdBuilder (Append xs ys)
+appendB :: ProdBuilder xs -> ProdBuilder ys -> ProdBuilder (xs <> ys)
 appendB (UnsafeProdBuilder b) (UnsafeProdBuilder b') = UnsafeProdBuilder \ref v -> do
   b ref v
   b' ref v
@@ -115,11 +115,6 @@ singletonB :: x -> ProdBuilder '[x]
 singletonB x = consB x emptyB
 
 type role Prod representational
-
--- | A type family for appending two type level lists.
-type family Append xs ys where
-  Append (x ': xs) ys = x ': Append xs ys
-  Append '[] ys = ys
 
 -- | A type family for computing the index of a type in a list of types.
 type family IndexIn (x :: k) (xs :: [k]) where
@@ -179,7 +174,6 @@ initN (UnsafeProd v) = UnsafeProd $ V.slice 0 n v
 -- inference and less piping around of constraints.
 dropFirst :: forall x xs. Prod (x ': xs) -> Prod xs
 dropFirst (UnsafeProd v) = UnsafeProd $ V.slice 1 (V.length v - 1) v
-
 
 type family (<>) (xs :: [k]) (ys :: [k]) :: [k] where
   '[] <> ys = ys

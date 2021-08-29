@@ -1,6 +1,6 @@
 cabal-version:       2.4
 name:                summer
-version:             0.3.1.0
+version:             0.3.1.1
 synopsis:            An implementation of extensible products and sums
 description:         An implementation of extensible products and sums.
 license:             MIT

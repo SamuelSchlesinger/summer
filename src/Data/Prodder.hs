@@ -44,6 +44,7 @@ module Data.Prodder
   , ProdBuilder
   , consB
   , emptyB
+  , appendB
     -- * Type families
   , Index
   , IndexIn
@@ -55,7 +56,8 @@ module Data.Prodder
   , Init
   , Replace
     -- * Rearranging and removing elements
-  , Strengthen(strengthen)
+  , Strengthen(strengthenP)
+  , strengthen
     -- * Transforming extensible products
   , remap
     -- * Picking out individual components of a product
@@ -102,7 +104,22 @@ buildProd (UnsafeProdBuilder bs) = UnsafeProd $ V.create do
   bs ref x
   pure x
 
+-- | Appends two 'ProdBuilder's.
+appendB :: ProdBuilder xs -> ProdBuilder ys -> ProdBuilder (Append xs ys)
+appendB (UnsafeProdBuilder b) (UnsafeProdBuilder b') = UnsafeProdBuilder \ref v -> do
+  b ref v
+  b' ref v
+
+-- | Creates a 'ProdBuilder' with a single element.
+singletonB :: x -> ProdBuilder '[x]
+singletonB x = consB x emptyB
+
 type role Prod representational
+
+-- | A type family for appending two type level lists.
+type family Append xs ys where
+  Append (x ': xs) ys = x ': Append xs ys
+  Append '[] ys = ys
 
 -- | A type family for computing the index of a type in a list of types.
 type family IndexIn (x :: k) (xs :: [k]) where
@@ -208,9 +225,9 @@ empty = buildProd $ produceB id
 instance Consume '[] where
   consume = flip const
   {-# INLINE CONLIKE consume #-}
-  produceB x = UnsafeProdBuilder \ref v -> pure ()
+  produceB x = emptyB
   {-# INLINE CONLIKE produceB #-}
-  extend1 x = UnsafeProdBuilder \ref v -> withIncrement ref \i -> MV.write v i (unsafeCoerce x)
+  extend1 x = consB x emptyB
   {-# INLINE CONLIKE extend1 #-}
   cmap f x = f x
   {-# INLINE CONLIKE cmap #-}
@@ -247,13 +264,16 @@ instance (Eq x, Eq (Prod xs)) => Eq (Prod (x ': xs)) where
 
 -- | A typeclass to rearrange and possibly remove things from a product.
 class Strengthen xs ys where
-  strengthen :: Prod xs -> Prod ys
+  strengthenP :: Prod xs -> ProdBuilder ys
+strengthen :: (KnownNat (Length ys), Strengthen xs ys) => Prod xs -> Prod ys
+strengthen = buildProd . strengthenP
+{-# INLINE CONLIKE strengthen #-}
 instance (Strengthen xs ys, y `HasIndexIn` xs) => Strengthen xs (y ': ys) where
-  strengthen p = UnsafeProd $ V.singleton (unsafeCoerce $ unProd p V.! fromIntegral (index @y @xs)) <> unProd (strengthen @xs @ys p)
-  {-# INLINE CONLIKE strengthen #-}
+  strengthenP p = consB (extract @y p) (strengthenP p)
+  {-# INLINE CONLIKE strengthenP #-}
 instance Strengthen xs '[] where
-  strengthen = const (UnsafeProd V.empty)
-  {-# INLINE CONLIKE strengthen #-}
+  strengthenP p = emptyB
+  {-# INLINE CONLIKE strengthenP #-}
 
 -- | A typeclass for creating a selection function which is valid on the given definition.
 type family Selector def fields a where

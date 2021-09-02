@@ -37,8 +37,10 @@ module Data.Prodder
   , Consume(consume, extend1, cmap, produceB)
   , produce
   , empty
-  , ToList(toList)
+  , FoldProd(foldProd)
+  , toList
   , type ForAll
+  , atType
     -- ** Efficient Iterative Construction
   , buildProd
   , ProdBuilder
@@ -73,6 +75,7 @@ import Control.Exception (catch, SomeException)
 import GHC.Exts (Any, Constraint)
 import Unsafe.Coerce (unsafeCoerce)
 import Data.Functor.Identity (Identity (..))
+import Data.Functor.Const (Const (..))
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import qualified Data.Vector.Mutable as MV
@@ -83,6 +86,11 @@ import Data.STRef (newSTRef, STRef, writeSTRef, readSTRef)
 
 -- | An extensible product type
 newtype Prod (xs :: [*]) = UnsafeProd { unProd :: Vector Any }
+
+-- | Lens to modify one element of a product.
+atType :: forall a b xs f. (a `HasIndexIn` xs, Functor f) => (a -> f b) -> Prod xs -> f (Prod (Replace a b xs))
+atType f (UnsafeProd v) = fmap (\b -> UnsafeProd $ v V.// [(fromIntegral i, unsafeCoerce b)]) (f (unsafeCoerce (v V.! fromIntegral i))) where
+  i = index @a @xs
 
 -- | A type for constructing products with linear memory use.
 newtype ProdBuilder (xs :: [*]) = UnsafeProdBuilder { unProdBuilder :: forall s. STRef s Int -> V.MVector s Any -> ST s () }
@@ -153,7 +161,7 @@ index = fromInteger $ natVal (Proxy @(IndexIn x xs))
 
 -- | Extract a value at a particular index
 extract :: forall x xs. x `HasIndexIn` xs => Prod xs -> x
-extract (UnsafeProd v) = unsafeCoerce $ v V.! fromIntegral (index @x @xs)
+extract = getConst . atType @x @() @xs Const
 {-# INLINE CONLIKE extract #-}
 
 -- | Takes the tail of a product after the nth element.
@@ -186,15 +194,11 @@ combine (UnsafeProd p) (UnsafeProd q) = UnsafeProd (p V.++ q)
 type family Replace x y xs where
   Replace x y (x ': xs) = y ': xs
   Replace x y (z ': xs) = z ': Replace x y xs
+  Replace x y '[] = '[]
 
 -- | Replaces one type with another via a function
 remap :: forall x y xs. x `HasIndexIn` xs => (x -> y) -> Prod xs -> Prod (Replace x y xs)
-remap f (UnsafeProd v) = UnsafeProd (update `V.imap` v) where
-  update :: Int -> Any -> Any
-  update (fromIntegral -> n) a
-    | n == index @x @xs = unsafeCoerce $ f $ unsafeCoerce a
-    | otherwise = a
-  {-# INLINE CONLIKE update #-}
+remap f = runIdentity . atType @x @y @xs (Identity . f)
 {-# INLINE CONLIKE remap #-}
 
 -- | This is a reified pattern match on an extensible product
@@ -291,15 +295,20 @@ instance (HasIndexIn x def, Selection def xs a) => Selection def (x -> xs) a whe
   select prod f = select @_ @_ @a prod (f (extract @x prod))
   {-# INLINE CONLIKE select #-}
 
--- | A class for turning a 'Prod' into a regular list using a
--- function which takes an argument only constrained by a 'Constraint'
--- each element of the product has.
-class ForAll c xs => ToList c xs where
-  toList :: (forall a. c a => a -> b) -> Prod xs -> [b]
+-- | A class for folding over a 'Prod' using a function which only requires that
+-- every element of the product satisfy a certain constraint.
+class ForAll c xs => FoldProd c xs where
+  foldProd :: Monoid m => (forall a. c a => a -> m) -> Prod xs -> m
 
-instance ToList c '[] where
-  toList _f _p = []
+instance FoldProd c '[] where
+  foldProd _f _p = mempty
 
-instance (c x, ToList c xs) => ToList c (x ': xs) where
-  toList f p = f x : toList @c f (dropFirst p) where
+instance (c x, FoldProd c xs) => FoldProd c (x ': xs) where
+  foldProd f p = f x <> foldProd @c f (dropFirst p) where
     x = extract @x p
+
+toList :: forall c xs a. FoldProd c xs => (forall x. c x => x -> a) -> Prod xs -> [a]
+toList f = foldProd @c (pure . f)
+
+class x `Contains` y where
+  eject :: x -> y

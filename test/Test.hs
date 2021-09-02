@@ -93,7 +93,7 @@ prodTest = catchAndDisplay
         [ (empty == buildProd emptyB, "prodBuilder does not work 0")
         , (produce (\f -> f "Hello") == buildProd (consB "Hello" emptyB), "prodBuilder does not work 1")
         ]
-    toListTest = do
+    foldProdTest = do
       let x :: Prod '[String, Bool] = produce \f -> f "Hello" True
       requires
         [ (toList @Show show x == [show "Hello", show True], "toList does not work 0")

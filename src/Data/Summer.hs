@@ -36,6 +36,7 @@ module Data.Summer
   , inspect
   , consider
   , considerFirst
+  , variant
   , Match(match, override, unmatch)
   , Unmatch
   -- * Type families
@@ -64,11 +65,28 @@ import Data.Kind (Type)
 import Control.Monad (unless)
 import Generics.SOP (Generic(..))
 import qualified Generics.SOP as SOP
+import Data.Profunctor (Profunctor(dimap), Choice(..))
 import Data.ForAll (type ForAll)
 
 -- | The extensible sum type, allowing inhabitants to be of any of the
 -- types in the given type list.
 data Sum (xs :: [*]) = UnsafeInj {-# UNPACK #-} !Word Any
+
+-- | A prism which operates on a chosen variant of a 'Sum'
+variant :: forall a b xs p f. (a `HasTagIn` xs, Applicative f, Choice p) => p a (f b) -> p (Sum xs) (f (Sum (Replace a b xs)))
+variant p = dimap try replace (left' p) where
+  try :: Sum xs -> Either a (Sum (Replace a b xs))
+  try (UnsafeInj t x) = if t == tag @a @xs then Left (unsafeCoerce x) else Right (UnsafeInj t x)
+  replace :: Either (f b) (Sum (Replace a b xs)) -> f (Sum (Replace a b xs))
+  replace = \case
+    Left fb -> fmap (UnsafeInj (tag @a @xs) . unsafeCoerce) fb
+    Right s -> pure s
+
+-- | Type family for replacing one type in a type level list with another
+type family Replace x y xs where
+  Replace x y (x ': xs) = y ': xs
+  Replace x y (z ': xs) = z ': Replace x y xs
+  Replace x y '[] = '[]
 
 instance Generic (Sum '[]) where
   type Code (Sum '[]) = '[]

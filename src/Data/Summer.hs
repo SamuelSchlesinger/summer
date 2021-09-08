@@ -72,6 +72,10 @@ import Data.ForAll (type ForAll)
 -- types in the given type list.
 data Sum (xs :: [*]) = UnsafeInj {-# UNPACK #-} !Word Any
 
+-- | Deconstruct a 'Sum' with only one variant
+eject :: Sum '[x] -> x
+eject (UnsafeInj _ x) = unsafeCoerce x
+
 -- | A prism which operates on a chosen variant of a 'Sum'
 variant :: forall a b xs p f. (a `HasTagIn` xs, Applicative f, Choice p) => p a (f b) -> p (Sum xs) (f (Sum (Replace a b xs)))
 variant p = dimap try replace (left' p) where

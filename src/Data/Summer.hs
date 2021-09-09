@@ -229,19 +229,34 @@ instance Weaken '[] ys where
   weaken = error "weaken base case: impossible by construction"
   {-# INLINE CONLIKE weaken #-}
 
-class UnorderedMatch xs ys where
-  unorderedMatch :: Sum xs -> Matcher ys r
+class UnorderedMatch xs matcher where
+  unorderedMatch :: Sum xs -> matcher
 
-instance UnorderedMatch '[] '[] where
+instance UnorderedMatch '[] r where
   unorderedMatch = error "unordered match base case: impossible by construction"
 
-instance (Match ys, y `HasTagIn` xs, UnorderedMatch (Delete y xs) ys) => UnorderedMatch xs (y ': ys) where
-  unorderedMatch :: forall r. Sum xs -> (y -> r) -> Matcher ys r
+instance
+  ( Result matcher ~ r
+  , Match (Unmatcher matcher r)
+  , Matcher (Unmatcher matcher r) r ~ matcher
+  , y `HasTagIn` xs
+  , UnorderedMatch  (Delete y xs) matcher
+  ) => UnorderedMatch xs ((y -> r) -> matcher) where
+  unorderedMatch :: Sum xs -> (y -> r) -> matcher
   unorderedMatch uv@(UnsafeInj tag' x) f =
     if tag' == tag @y @xs
-      then override @ys @r (f (unsafeCoerce x)) $ unorderedMatch @(Delete y xs) @ys @r (unsafeForget @y uv)
-      else unorderedMatch @(Delete y xs) @ys @r (unsafeForget @y uv)
-  
+      then override @(Unmatcher matcher r) @r (f (unsafeCoerce x)) $ unorderedMatch @(Delete y xs) @matcher (unsafeForget @y uv)
+      else unorderedMatch @(Delete y xs) @matcher (unsafeForget @y uv)
+
+-- | Returns the result type of the Scott encoding for the particular Sum's elements.
+type family Result matcher :: Type where
+  Result ((x -> r) -> matcher) = r
+  Result r = r
+
+-- | What types does this Scott encoding have in its Sum?
+type family Unmatcher matcher r :: [Type] where
+  Unmatcher r r = '[]
+  Unmatcher ((x -> r) -> matcher) r = x ': Unmatcher matcher r
 
 -- | The scott encoding of an extensible sum
 type family Matcher xs r :: Type where

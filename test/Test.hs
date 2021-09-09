@@ -186,4 +186,4 @@ sumTest = catchAndDisplay
       require (apply @Show show x == "False") "apply does not work 0"
     unorderedMatchTest = do
       let x :: Sum '[Int, Bool] = Inj False
-      require (unorderedMatch @_ @'[Bool, Int] x not (== 10)) "unordered match does not work 0"
+      require (unorderedMatch x not (\(x :: Int) -> x == 10)) "unordered match does not work 0"

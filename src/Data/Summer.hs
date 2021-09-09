@@ -37,6 +37,7 @@ module Data.Summer
   , consider
   , considerFirst
   , variant
+  , UnorderedMatch(unorderedMatch)
   , Match(match, override, unmatch)
   , Unmatch
   -- * Type families
@@ -75,6 +76,7 @@ data Sum (xs :: [*]) = UnsafeInj {-# UNPACK #-} !Word Any
 -- | Deconstruct a 'Sum' with only one variant
 eject :: Sum '[x] -> x
 eject (UnsafeInj _ x) = unsafeCoerce x
+{-# INLINE CONLIKE eject #-}
 
 -- | A prism which operates on a chosen variant of a 'Sum'
 variant :: forall a b xs p f. (a `HasTagIn` xs, Applicative f, Choice p) => p a (f b) -> p (Sum xs) (f (Sum (Replace a b xs)))
@@ -85,6 +87,7 @@ variant p = dimap try replace (left' p) where
   replace = \case
     Left fb -> fmap (UnsafeInj (tag @a @xs) . unsafeCoerce) fb
     Right s -> pure s
+{-# INLINE CONLIKE variant #-}
 
 -- | Type family for replacing one type in a type level list with another
 type family Replace x y xs where
@@ -193,11 +196,12 @@ unsafeForget :: forall x xs. x `HasTagIn` xs => Sum xs -> Sum (Delete x xs)
 unsafeForget (UnsafeInj tag' x) = if tag' < tag @x @xs then UnsafeInj tag' x
                              else if tag' == tag @x @xs then error "unsafeForget: you can't forget the truth"
                              else UnsafeInj (tag' - 1) x
+{-# INLINE CONLIKE unsafeForget #-}
 
 
 unsafeForgetFirst :: Sum (x ': xs) -> Sum xs
 unsafeForgetFirst (UnsafeInj tag' x) = UnsafeInj (tag' - 1) x
-{-# INLINE CONLIKE unsafeForget #-}
+{-# INLINE CONLIKE unsafeForgetFirst #-}
 
 -- | Testing extensible sums for equality.
 instance (Eq (Sum xs), Eq x) => Eq (Sum (x ': xs)) where
@@ -210,6 +214,7 @@ instance (Eq (Sum xs), Eq x) => Eq (Sum (x ': xs)) where
   {-# INLINE CONLIKE (==) #-}
 instance Eq (Sum '[]) where
   (==) = error "(==) base case: impossible by construction"
+  {-# INLINE CONLIKE (==) #-}
 
 -- | Transforming one sum into a sum which contains all of the same types
 class Weaken xs ys where
@@ -223,6 +228,20 @@ instance (Weaken xs ys, x `HasTagIn` ys) => Weaken (x ': xs) ys where
 instance Weaken '[] ys where
   weaken = error "weaken base case: impossible by construction"
   {-# INLINE CONLIKE weaken #-}
+
+class UnorderedMatch xs ys where
+  unorderedMatch :: Sum xs -> Matcher ys r
+
+instance UnorderedMatch '[] '[] where
+  unorderedMatch = error "unordered match base case: impossible by construction"
+
+instance (Match ys, y `HasTagIn` xs, UnorderedMatch (Delete y xs) ys) => UnorderedMatch xs (y ': ys) where
+  unorderedMatch :: forall r. Sum xs -> (y -> r) -> Matcher ys r
+  unorderedMatch uv@(UnsafeInj tag' x) f =
+    if tag' == tag @y @xs
+      then override @ys @r (f (unsafeCoerce x)) $ unorderedMatch @(Delete y xs) @ys @r (unsafeForget @y uv)
+      else unorderedMatch @(Delete y xs) @ys @r (unsafeForget @y uv)
+  
 
 -- | The scott encoding of an extensible sum
 type family Matcher xs r :: Type where
@@ -271,8 +290,10 @@ class ForAll c xs => ApplyFunction c xs where
 
 instance ApplyFunction c '[] where
   apply _f x = error "Impossible: empty sum"
+  {-# INLINE CONLIKE apply #-}
 
 instance (c x, ApplyFunction c xs) => ApplyFunction c (x ': xs) where
   apply f x = case considerFirst x of
     Right x' -> f x'
     Left xs -> apply @c f xs
+  {-# INLINE CONLIKE apply #-}

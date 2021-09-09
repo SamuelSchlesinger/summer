@@ -15,6 +15,9 @@ main = sumTest >> prodTest
 require :: Bool -> String -> IO ()
 require p s = unless p $ fail s
 
+requires' :: String -> [Bool] -> IO ()
+requires' msg = mapM_ (\(i, b) -> require b (msg <> " " <> show i)) . zip [1..]
+
 requires :: [(Bool, String)] -> IO ()
 requires = mapM_ (uncurry require)
 
@@ -34,17 +37,17 @@ prodTest = catchAndDisplay
     indexTest = do
       let index' = index @Int @'[Bool, Int]
           index'' = index @Bool @'[Bool, Int]
-      requires
-        [ (index' == 1, "Index " <> show index' <> " does not equal 1")
-        , (index'' == 0, "Index " <> show index'' <> " does not equal 0")
+      requires' "index"
+        [ index' == 1
+        , index'' == 0
         ]
     remapTest = do
       let x :: Prod '[Int, Bool] = produce (\f -> f 10 True)
       let y = remap ((+ 10000000000000000000000000000) . toInteger @Int) x
       let z = remap not x
-      requires
-        [ (y == produce (\f -> f 10000000000000000000000000010 True), "Remapping does not work 1")
-        , (z == produce (\f -> f 10 False), "Remapping does not work 2")
+      requires' "remap"
+        [ y == produce (\f -> f 10000000000000000000000000010 True)
+        , z == produce (\f -> f 10 False)
         ]
     consumeAndProduceTest = do
       let x :: Prod '[Int, Bool] = produce (\f -> f 10 True)
@@ -181,3 +184,6 @@ sumTest = catchAndDisplay
     applyTest = do
       let x :: Sum '[Int, Bool] = Inj False
       require (apply @Show show x == "False") "apply does not work 0"
+    unorderedMatchTest = do
+      let x :: Sum '[Int, Bool] = Inj False
+      require (unorderedMatch @_ @'[Bool, Int] x not (== 10)) "unordered match does not work 0"

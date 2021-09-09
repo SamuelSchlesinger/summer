@@ -66,7 +66,6 @@ module Data.Prodder
   , Selection(select)
   , type FieldsFromSelector
   , type Selector
-    -- * Efficiently building 'Prod's
   ) where
 
 import Data.ForAll (type ForAll)
@@ -91,6 +90,7 @@ newtype Prod (xs :: [*]) = UnsafeProd { unProd :: Vector Any }
 atType :: forall a b xs f. (a `HasIndexIn` xs, Functor f) => (a -> f b) -> Prod xs -> f (Prod (Replace a b xs))
 atType f (UnsafeProd v) = fmap (\b -> UnsafeProd $ v V.// [(fromIntegral i, unsafeCoerce b)]) (f (unsafeCoerce (v V.! fromIntegral i))) where
   i = index @a @xs
+{-# INLINE CONLIKE atType #-}
 
 -- | A type for constructing products with linear memory use.
 newtype ProdBuilder (xs :: [*]) = UnsafeProdBuilder { unProdBuilder :: forall s. STRef s Int -> V.MVector s Any -> ST s () }
@@ -99,10 +99,12 @@ newtype ProdBuilder (xs :: [*]) = UnsafeProdBuilder { unProdBuilder :: forall s.
 consB :: x -> ProdBuilder xs -> ProdBuilder (x ': xs)
 consB x (UnsafeProdBuilder b) = UnsafeProdBuilder \ref v -> withIncrement ref \i -> do
   MV.write v i (unsafeCoerce x)
+{-# INLINE CONLIKE consB #-}
 
 -- | Empty 'ProdBuilder'.
 emptyB :: ProdBuilder '[]
 emptyB = UnsafeProdBuilder \_ _ -> pure ()
+{-# INLINE CONLIKE emptyB #-}
 
 -- | Execute a 'ProdBuilder', pulling out a 'Prod'.
 buildProd :: forall xs. (KnownNat (Length xs)) => ProdBuilder xs -> Prod xs
@@ -111,12 +113,14 @@ buildProd (UnsafeProdBuilder bs) = UnsafeProd $ V.create do
   x <- MV.new (fromInteger $ natVal (Proxy @(Length xs)))
   bs ref x
   pure x
+{-# INLINE CONLIKE buildProd #-}
 
 -- | Appends two 'ProdBuilder's.
 appendB :: ProdBuilder xs -> ProdBuilder ys -> ProdBuilder (xs <> ys)
 appendB (UnsafeProdBuilder b) (UnsafeProdBuilder b') = UnsafeProdBuilder \ref v -> do
   b ref v
   b' ref v
+{-# INLINE CONLIKE appendB #-}
 
 -- | Creates a 'ProdBuilder' with a single element.
 singletonB :: x -> ProdBuilder '[x]
@@ -182,6 +186,7 @@ initN (UnsafeProd v) = UnsafeProd $ V.slice 0 n v
 -- inference and less piping around of constraints.
 dropFirst :: forall x xs. Prod (x ': xs) -> Prod xs
 dropFirst (UnsafeProd v) = UnsafeProd $ V.slice 1 (V.length v - 1) v
+{-# INLINE CONLIKE dropFirst #-}
 
 type family (<>) (xs :: [k]) (ys :: [k]) :: [k] where
   '[] <> ys = ys
@@ -216,9 +221,11 @@ class Consume xs where
 
 produce :: (KnownNat (Length xs), Consume xs) => (forall r. Consumer xs r -> r) -> Prod xs
 produce f = buildProd $ produceB f
+{-# INLINE CONLIKE produce #-}
 
 empty :: Prod '[]
 empty = buildProd $ produceB id
+{-# INLINE CONLIKE empty #-}
 
 instance Consume '[] where
   consume = flip const
@@ -236,6 +243,7 @@ withIncrement ref f = do
   x <- f i
   writeSTRef ref (i + 1)
   pure x
+{-# INLINE CONLIKE withIncrement #-}
 
 instance Consume xs => Consume (x ': xs) where
   consume (UnsafeProd v) g = consume @xs (UnsafeProd (V.tail v)) $ g (unsafeCoerce $ v V.! 0)
@@ -302,13 +310,27 @@ class ForAll c xs => FoldProd c xs where
 
 instance FoldProd c '[] where
   foldProd _f _p = mempty
+  {-# INLINE CONLIKE foldProd #-}
 
 instance (c x, FoldProd c xs) => FoldProd c (x ': xs) where
   foldProd f p = f x <> foldProd @c f (dropFirst p) where
     x = extract @x p
+  {-# INLINE CONLIKE foldProd #-}
 
 toList :: forall c xs a. FoldProd c xs => (forall x. c x => x -> a) -> Prod xs -> [a]
 toList f = foldProd @c (pure . f)
+{-# INLINE CONLIKE toList #-}
 
 class x `Contains` y where
-  eject :: x -> y
+  uncontain :: x -> y
+
+instance {-# OVERLAPPABLE #-} x `HasIndexIn` xs => Prod xs `Contains` x where
+  uncontain = extract
+
+instance {-# OVERLAPPABLE #-} (KnownNat (Length xs'), Strengthen xs xs') => Prod xs `Contains` Prod xs' where
+  uncontain = strengthen
+
+newtype Nested a = Nested { unNest :: a }
+
+instance {-# OVERLAPPABLE #-} (x `Contains` y, x `HasIndexIn` xs) => Prod xs `Contains` Nested y where
+  uncontain = Nested . uncontain @x @y . uncontain @(Prod xs) @x

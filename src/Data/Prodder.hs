@@ -82,9 +82,19 @@ import GHC.TypeLits (KnownNat, type (+), type (-), natVal, type (<=), Nat)
 import Data.Proxy (Proxy(Proxy))
 import Control.Monad.ST
 import Data.STRef (newSTRef, STRef, writeSTRef, readSTRef)
+import Data.Typeable (Typeable)
+import Data.Monoid (Endo (Endo, appEndo))
+import Data.List (intersperse)
+import Data.Foldable (fold)
 
 -- | An extensible product type
 newtype Prod (xs :: [*]) = UnsafeProd { unProd :: Vector Any }
+  deriving (Typeable)
+
+-- | Showing extensible products.
+instance FoldProd Show xs => Show (Prod xs) where
+  showsPrec d xs = showParen (d > 10) . appEndo . fold $
+    [Endo $ \r -> "[" <> r] <> intersperse (Endo $ \r -> ", " <> r) (toList @Show (Endo . showsPrec (d + 1)) xs) <> [Endo $ \r -> "]" <> r]
 
 -- | Lens to modify one element of a product.
 atType :: forall a b xs f. (a `HasIndexIn` xs, Functor f) => (a -> f b) -> Prod xs -> f (Prod (Replace a b xs))

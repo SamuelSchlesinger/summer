@@ -1,3 +1,4 @@
+{-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE UndecidableSuperClasses #-}
 {-# LANGUAGE LambdaCase #-}
@@ -67,11 +68,13 @@ import Control.Monad (unless)
 import Generics.SOP (Generic(..))
 import qualified Generics.SOP as SOP
 import Data.Profunctor (Profunctor(dimap), Choice(..))
+import Data.Typeable (typeRep, Typeable)
 import Data.ForAll (type ForAll)
 
 -- | The extensible sum type, allowing inhabitants to be of any of the
 -- types in the given type list.
 data Sum (xs :: [*]) = UnsafeInj {-# UNPACK #-} !Word Any
+  deriving (Typeable)
 
 -- | Deconstruct a 'Sum' with only one variant
 eject :: Sum '[x] -> x
@@ -215,6 +218,18 @@ instance (Eq (Sum xs), Eq x) => Eq (Sum (x ': xs)) where
 instance Eq (Sum '[]) where
   (==) = error "(==) base case: impossible by construction"
   {-# INLINE CONLIKE (==) #-}
+
+-- | Showing extensible sums.
+instance Show (Sum '[]) where
+  showsPrec n uv = error "show base case: impossible by construction"
+instance (Show x, Typeable x, Show (Sum xs)) => Show (Sum (x ': xs)) where
+  showsPrec d uv@(UnsafeInj tag' x)
+    | tag' == 0 = showParen (d > 10) $
+          showString "Inj @"
+        . showParen True (showsPrec (d + 1) (typeRep (Proxy @x)))
+        . showString " "
+        . showParen True (showsPrec @x (d + 1) (unsafeCoerce x))
+    | otherwise = showsPrec @(Sum xs) d (unsafeForgetFirst uv)
 
 -- | Transforming one sum into a sum which contains all of the same types
 class Weaken xs ys where

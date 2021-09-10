@@ -30,6 +30,10 @@ prodTest = catchAndDisplay
   , strengthenTest
   , tailNTest
   , initNTest
+  , prodBuilderTest
+  , selectTest
+  , foldProdTest
+  , showTest
   ]
   where
     catchAndDisplay (x : xs) = catch @SomeException x print >> catchAndDisplay xs
@@ -102,6 +106,10 @@ prodTest = catchAndDisplay
         [ (toList @Show show x == [show "Hello", show True], "toList does not work 0")
         , (toList @Eq (\a -> a == a) x == [True, True], "toList does not work 1")
         ]
+    showTest = do
+      let x :: Prod '[Int, Bool, Char, Float] = produce (\f -> f 10 True 'a' 0.2)
+      require (show x == "[10, True, 'a', 0.2]") "show product 0"
+      
 
 sumTest :: IO ()
 sumTest = catchAndDisplay
@@ -114,6 +122,9 @@ sumTest = catchAndDisplay
   , inmapTest
   , smapTest
   , unmatchTest
+  , applyTest
+  , unorderedMatchTest
+  , showTest
   ]
   where
     catchAndDisplay (x : xs) = catch @SomeException x print >> catchAndDisplay xs
@@ -187,3 +198,6 @@ sumTest = catchAndDisplay
     unorderedMatchTest = do
       let x :: Sum '[Int, Bool] = Inj False
       require (unorderedMatch x not (\(x :: Int) -> x == 10)) "unordered match does not work 0"
+    showTest = do
+      let x :: Sum '[Int, Bool] = Inj False
+      require (show x == "Inj @Bool False") "show sum does not work 0"

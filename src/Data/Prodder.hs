@@ -330,17 +330,3 @@ instance (c x, FoldProd c xs) => FoldProd c (x ': xs) where
 toList :: forall c xs a. FoldProd c xs => (forall x. c x => x -> a) -> Prod xs -> [a]
 toList f = foldProd @c (pure . f)
 {-# INLINE CONLIKE toList #-}
-
-class x `Contains` y where
-  uncontain :: x -> y
-
-instance {-# OVERLAPPABLE #-} x `HasIndexIn` xs => Prod xs `Contains` x where
-  uncontain = extract
-
-instance {-# OVERLAPPABLE #-} (KnownNat (Length xs'), Strengthen xs xs') => Prod xs `Contains` Prod xs' where
-  uncontain = strengthen
-
-newtype Nested a = Nested { unNest :: a }
-
-instance {-# OVERLAPPABLE #-} (x `Contains` y, x `HasIndexIn` xs) => Prod xs `Contains` Nested y where
-  uncontain = Nested . uncontain @x @y . uncontain @(Prod xs) @x

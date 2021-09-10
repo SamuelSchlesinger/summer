@@ -167,10 +167,12 @@ sumTest = catchAndDisplay
     considerTest = do
       let x :: Sum '[Int, Bool] = Inj (10 :: Int)
           y :: Sum '[Int, Bool] = Inj True
-      requires
-        [ (consider @Int x == Right 10, "x at Int is not considered to be 10"),
-          (consider @Int y == Left (Inj True), "x is not considered to be Left (Inj True)"),
-          (consider @Bool y == Right True, "x at Bool is not considered to be Right True")
+          z :: Sum '[Int, Bool, Char] = Inj @Int 10
+      requires' "consider"
+        [ consider @Int x == Right 10
+        , consider @Int y == Left (Inj True)
+        , consider @Bool y == Right True
+        , consider @Bool z == Left (Inj @Int 10)
         ]
     inmapTest = do
       let x :: Sum '[Int, Bool] = Inj (10 :: Int)
@@ -197,7 +199,15 @@ sumTest = catchAndDisplay
       require (apply @Show show x == "False") "apply does not work 0"
     unorderedMatchTest = do
       let x :: Sum '[Int, Bool] = Inj False
-      require (unorderedMatch x not (\(x :: Int) -> x == 10)) "unordered match does not work 0"
+      requires' "unordered match"
+        [ unorderedMatch x not (\(x :: Int) -> x == 10)
+        , unorderedMatch x (\(x :: Int) -> x == 10) not
+        ]
     showTest = do
       let x :: Sum '[Int, Bool] = Inj False
-      require (show x == "Inj @Bool False") "show sum does not work 0"
+      let y :: Sum '[Int, Bool] = Inj @Int 1
+      requires' "show sum"
+        [ show x == "Inj @Bool False"
+        , show y == "Inj @Int 1"
+        ]
+      

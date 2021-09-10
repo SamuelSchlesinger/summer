@@ -219,17 +219,18 @@ instance Eq (Sum '[]) where
   (==) = error "(==) base case: impossible by construction"
   {-# INLINE CONLIKE (==) #-}
 
+class (Show x, Typeable x) => ShowTypeable x
+instance (Show x, Typeable x) => ShowTypeable x
+
 -- | Showing extensible sums.
-instance Show (Sum '[]) where
-  showsPrec n uv = error "show base case: impossible by construction"
-instance (Show x, Typeable x, Show (Sum xs)) => Show (Sum (x ': xs)) where
-  showsPrec d uv@(UnsafeInj tag' x)
-    | tag' == 0 = showParen (d > 10) $
-          showString "Inj @"
-        . showParen True (showsPrec (d + 1) (typeRep (Proxy @x)))
-        . showString " "
-        . showParen True (showsPrec @x (d + 1) (unsafeCoerce x))
-    | otherwise = showsPrec @(Sum xs) d (unsafeForgetFirst uv)
+instance ApplyFunction ShowTypeable xs => Show (Sum xs) where
+  showsPrec d v = showParen (d > 10) $
+      showString "Inj @"
+    . apply @ShowTypeable (\(x :: x) ->
+        showsPrec (d + 1) (typeRep (Proxy @x))
+      . showString " "
+      . showParen True (showsPrec (d + 1) x)
+    ) v
 
 -- | Transforming one sum into a sum which contains all of the same types
 class Weaken xs ys where

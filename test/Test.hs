@@ -1,13 +1,16 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 module Main (main) where
 
 import Control.Exception
 import Control.Monad
+import Data.Functor.Identity (Identity(..))
 import Data.Summer
 import Data.Prodder
+import qualified Generics.SOP as SOP
 
 main :: IO ()
 main = sumTest >> prodTest
@@ -34,6 +37,11 @@ prodTest = catchAndDisplay
   , selectTest
   , foldProdTest
   , showTest
+  , dropFirstTest
+  , appendBTest
+  , atTypeTest
+  , emptyEqTest
+  , extractMiddleTest
   ]
   where
     catchAndDisplay (x : xs) = catch @SomeException x print >> catchAndDisplay xs
@@ -109,7 +117,46 @@ prodTest = catchAndDisplay
     showTest = do
       let x :: Prod '[Int, Bool, Char, Float] = produce (\f -> f 10 True 'a' 0.2)
       require (show x == "[10, True, 'a', 0.2]") "show product 0"
-      
+    dropFirstTest = do
+      let x :: Prod '[Int, Bool, Char] = produce (\f -> f 10 True 'a')
+          y :: Prod '[Bool, Char] = dropFirst x
+      requires' "dropFirst"
+        [ extract @Bool y == True
+        , extract @Char y == 'a'
+        ]
+    appendBTest = do
+      let ab = consB (1 :: Int) (consB True emptyB)
+          cd = consB 'x' (consB (2.0 :: Float) emptyB)
+          combined :: Prod '[Int, Bool, Char, Float] = buildProd (appendB ab cd)
+      requires' "appendB"
+        [ extract @Int combined == 1
+        , extract @Bool combined == True
+        , extract @Char combined == 'x'
+        , extract @Float combined == 2.0
+        ]
+    atTypeTest = do
+      let x :: Prod '[Int, Bool, Char] = produce (\f -> f 10 True 'a')
+          y :: Prod '[Int, Bool, Char] = runIdentity $ atType @Bool @Bool (\b -> Identity (not b)) x
+          z :: Prod '[Int, Bool, Char] = runIdentity $ atType @Int @Int (\n -> Identity (n + 100)) x
+      requires' "atType"
+        [ extract @Bool y == False
+        , extract @Int y == 10
+        , extract @Char y == 'a'
+        , extract @Int z == 110
+        , extract @Bool z == True
+        ]
+    emptyEqTest = do
+      let x :: Prod '[] = empty
+          y :: Prod '[] = empty
+      require (x == y) "empty products are not equal"
+    extractMiddleTest = do
+      let x :: Prod '[Char, Bool, Int, Float] = produce (\f -> f 'z' False 42 3.14)
+      requires' "extract middle"
+        [ extract @Char x == 'z'
+        , extract @Bool x == False
+        , extract @Int x == 42
+        , extract @Float x == 3.14
+        ]
 
 sumTest :: IO ()
 sumTest = catchAndDisplay
@@ -119,12 +166,20 @@ sumTest = catchAndDisplay
   , weakenTest
   , matchTest
   , considerTest
+  , considerFirstTest
+  , inspectTest
   , inmapTest
   , smapTest
   , unmatchTest
   , applyTest
   , unorderedMatchTest
   , showTest
+  , matchMultiVariantTest
+  , weakenNonFirstTest
+  , genericsSopTest
+  , variantTest
+  , threeVariantConsiderTest
+  , unmatchRoundtripAllPositionsTest
   ]
   where
     catchAndDisplay (x : xs) = catch @SomeException x print >> catchAndDisplay xs
@@ -174,6 +229,21 @@ sumTest = catchAndDisplay
         , consider @Bool y == Right True
         , consider @Bool z == Left (Inj @Int 10)
         ]
+    considerFirstTest = do
+      let x :: Sum '[Int, Bool] = Inj (10 :: Int)
+          y :: Sum '[Int, Bool] = Inj True
+      requires' "considerFirst"
+        [ considerFirst x == Right (10 :: Int)
+        , considerFirst y == Left (Inj True)
+        ]
+    inspectTest = do
+      let x :: Sum '[Int, Bool, Char] = Inj (42 :: Int)
+      requires' "inspect"
+        [ inspect @Int x == Just 42
+        , inspect @Bool x == Nothing
+        , inspect @Char x == Nothing
+        , inspect @Bool (Inj True :: Sum '[Int, Bool]) == Just True
+        ]
     inmapTest = do
       let x :: Sum '[Int, Bool] = Inj (10 :: Int)
           y :: Sum '[Int, Bool] = inmap (== (10 :: Int)) x
@@ -207,7 +277,59 @@ sumTest = catchAndDisplay
       let x :: Sum '[Int, Bool] = Inj False
       let y :: Sum '[Int, Bool] = Inj @Int 1
       requires' "show sum"
-        [ show x == "Inj @Bool False"
-        , show y == "Inj @Int 1"
+        [ show x == "Inj @Bool (False)"
+        , show y == "Inj @Int (1)"
+        ]
+    matchMultiVariantTest = do
+      let x :: Sum '[Int, Bool, Char] = Inj 'z'
+          y :: Sum '[Int, Bool, Char] = Inj True
+          z :: Sum '[Int, Bool, Char] = Inj (99 :: Int)
+      requires' "match multi-variant"
+        [ match x (const 'a') (const 'b') id == 'z'
+        , match y (const 'a') (\b -> if b then 'T' else 'F') id == 'T'
+        , match z (\n -> if n == 99 then 'Y' else 'N') (const 'b') id == 'Y'
+        ]
+    weakenNonFirstTest = do
+      let x :: Sum '[Int, Bool] = Inj True
+          y :: Sum '[Bool, Int] = weaken x
+          z :: Sum '[Char, Bool, Int] = weaken x
+      requires' "weaken non-first variant"
+        [ y == Inj True
+        , z == Inj True
+        , inspect @Bool y == Just True
+        , inspect @Bool z == Just True
+        ]
+    genericsSopTest = do
+      let x :: Sum '[Int, Bool] = Inj (42 :: Int)
+          y :: Sum '[Int, Bool] = Inj True
+          roundtrip :: Sum '[Int, Bool] -> Sum '[Int, Bool]
+          roundtrip = SOP.to . SOP.from
+      requires' "generics-sop"
+        [ roundtrip x == x
+        , roundtrip y == y
+        ]
+    variantTest = do
+      let x :: Sum '[Int, Bool, Char] = Inj (10 :: Int)
+          y :: Sum '[Int, Bool, Char] = Inj True
+      requires' "variant prism"
+        [ runIdentity (variant @Int @Int (\n -> Identity (n * 2)) x) == Inj (20 :: Int)
+        , runIdentity (variant @Int @Int (\n -> Identity (n * 2)) y) == Inj True
+        , inspect @Int (runIdentity (variant @Int @Int (\n -> Identity (n + 5)) x)) == Just 15
+        ]
+    threeVariantConsiderTest = do
+      let x :: Sum '[Int, Bool, Char] = Inj 'a'
+      requires' "three variant consider"
+        [ consider @Int x == Left (Inj 'a' :: Sum '[Bool, Char])
+        , consider @Bool x == Left (Inj 'a' :: Sum '[Int, Char])
+        , consider @Char x == Right 'a'
+        ]
+    unmatchRoundtripAllPositionsTest = do
+      let x :: Sum '[Int, Bool, Char] = Inj (7 :: Int)
+          y :: Sum '[Int, Bool, Char] = Inj False
+          z :: Sum '[Int, Bool, Char] = Inj 'q'
+      requires' "unmatch roundtrip all positions"
+        [ unmatch (match x) == x
+        , unmatch (match y) == y
+        , unmatch (match z) == z
         ]
       

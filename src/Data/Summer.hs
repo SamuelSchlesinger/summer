@@ -73,7 +73,7 @@ import Data.ForAll (type ForAll)
 
 -- | The extensible sum type, allowing inhabitants to be of any of the
 -- types in the given type list.
-data Sum (xs :: [*]) = UnsafeInj {-# UNPACK #-} !Word Any
+data Sum (xs :: [Type]) = UnsafeInj {-# UNPACK #-} !Word Any
   deriving (Typeable)
 
 -- | Deconstruct a 'Sum' with only one variant

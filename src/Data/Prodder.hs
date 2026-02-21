@@ -71,6 +71,7 @@ module Data.Prodder
 import Data.ForAll (type ForAll)
 import Control.Monad (unless)
 import Control.Exception (catch, SomeException)
+import Data.Kind (Type)
 import GHC.Exts (Any, Constraint)
 import Unsafe.Coerce (unsafeCoerce)
 import Data.Functor.Identity (Identity (..))
@@ -88,7 +89,7 @@ import Data.List (intersperse)
 import Data.Foldable (fold)
 
 -- | An extensible product type
-newtype Prod (xs :: [*]) = UnsafeProd { unProd :: Vector Any }
+newtype Prod (xs :: [Type]) = UnsafeProd { unProd :: Vector Any }
   deriving (Typeable)
 
 -- | Showing extensible products.
@@ -103,12 +104,13 @@ atType f (UnsafeProd v) = fmap (\b -> UnsafeProd $ v V.// [(fromIntegral i, unsa
 {-# INLINE CONLIKE atType #-}
 
 -- | A type for constructing products with linear memory use.
-newtype ProdBuilder (xs :: [*]) = UnsafeProdBuilder { unProdBuilder :: forall s. STRef s Int -> V.MVector s Any -> ST s () }
+newtype ProdBuilder (xs :: [Type]) = UnsafeProdBuilder { unProdBuilder :: forall s. STRef s Int -> V.MVector s Any -> ST s () }
 
 -- | Cons an element onto the head of a 'ProdBuilder'.
 consB :: x -> ProdBuilder xs -> ProdBuilder (x ': xs)
-consB x (UnsafeProdBuilder b) = UnsafeProdBuilder \ref v -> withIncrement ref \i -> do
-  MV.write v i (unsafeCoerce x)
+consB x (UnsafeProdBuilder b) = UnsafeProdBuilder \ref v -> do
+  withIncrement ref \i -> MV.write v i (unsafeCoerce x)
+  b ref v
 {-# INLINE CONLIKE consB #-}
 
 -- | Empty 'ProdBuilder'.

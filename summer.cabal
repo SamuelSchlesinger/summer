@@ -9,9 +9,8 @@ author:              Samuel Schlesinger
 maintainer:          sgschlesinger@gmail.com
 copyright:           2020 Samuel Schlesinger
 category:            Data
-extra-source-files:  CHANGELOG.md, README.md
+extra-doc-files:     CHANGELOG.md, README.md
 build-type:          Simple
-extra-source-files:  CHANGELOG.md
 tested-with:         GHC ==8.10.7 || ==9.2.8 || ==9.4.8 || ==9.6.6 || ==9.8.4 || ==9.10.1 || ==9.12.1
 
 source-repository head
@@ -21,7 +20,7 @@ source-repository head
 library
   exposed-modules:     Data.Summer, Data.Prodder
   other-modules:       Data.ForAll
-  build-depends:       base >=4.12 && <4.22, vector >=0.12, generics-sop >=0.5, profunctors >=5.6
+  build-depends:       base >=4.12 && <4.22, vector >=0.12 && <0.14, generics-sop >=0.5 && <0.6, profunctors >=5.6 && <5.7
   hs-source-dirs:      src
   default-language:    Haskell2010
 
